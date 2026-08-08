@@ -29,7 +29,8 @@ test("server-renders Le Grimoire", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Le Grimoire<\/title>/i);
-  assert.match(html, /restaurant prive pour deux/i);
+  assert.match(html, /Libro de reservas/i);
+  assert.match(html, /Abrir recetas/i);
   assert.match(html, /Cuisine/i);
   assert.match(html, /Le Grimoire/i);
   assert.match(html, /Reserve/i);

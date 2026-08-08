@@ -110,6 +110,7 @@ function Scene({
   active,
   hotspots,
   onNavigate,
+  showTitle = true,
   children,
 }: {
   title: string;
@@ -119,6 +120,7 @@ function Scene({
   active: boolean;
   hotspots?: Hotspot[];
   onNavigate: (section: SectionId) => void;
+  showTitle?: boolean;
   children?: ReactNode;
 }) {
   if (!active) return null;
@@ -128,13 +130,15 @@ function Scene({
       <div className="scene-frame">
         <Image src={image} alt={alt} fill priority={title === "Salon"} unoptimized sizes="100vw" className="scene-image" />
         <div className="scene-vignette" />
-        <header className="room-title">
-          <button className="back-mark" type="button" onClick={() => onNavigate("home")}>
-            Salon
-          </button>
-          <p>{subtitle}</p>
-          <h1>{title}</h1>
-        </header>
+        {showTitle ? (
+          <header className="room-title">
+            <button className="back-mark" type="button" onClick={() => onNavigate("home")}>
+              Salon
+            </button>
+            <p>{subtitle}</p>
+            <h1>{title}</h1>
+          </header>
+        ) : null}
         {hotspots?.map((hotspot) => (
           <button
             key={hotspot.id}
@@ -303,7 +307,6 @@ export function LeGrimoireApp() {
     { id: "book-plats", label: "Nos Plats", tooltip: "Album de platos", x: 35, y: 83, target: "plats", variant: "book" },
     { id: "book-lettres", label: "Les Lettres", tooltip: "Correspondencia privada", x: 61, y: 83, target: "lettres", variant: "book" },
     { id: "doors-cuisine", label: "Cuisine", tooltip: "Entrar por las puertas dobles", x: 50, y: 34, target: "cuisine", variant: "door" },
-    { id: "shelf-grimoire", label: "Grimoire", tooltip: "Abrir el libro de recetas", x: 82, y: 17, target: "grimoire", variant: "quiet" },
   ];
 
   const cuisineHotspots: Hotspot[] = [
@@ -338,7 +341,12 @@ export function LeGrimoireApp() {
         active={activeSection === "home"}
         hotspots={salonHotspots}
         onNavigate={setActiveSection}
+        showTitle={false}
       >
+        <button className="closed-grimoire" type="button" onClick={() => setActiveSection("grimoire")} aria-label="Abrir el libro de recetas">
+          <span>Le Grimoire</span>
+          <small>Abrir recetas</small>
+        </button>
         <aside className="reservation-note">
           <span>Libro de reservas</span>
           <strong>{activeClient.name}</strong>

@@ -315,7 +315,6 @@ export function LeGrimoireApp() {
       >
         <button className="closed-grimoire" type="button" onClick={() => setActiveSection("grimoire")} aria-label="Abrir el libro de recetas">
           <span>Le Grimoire</span>
-          <small>Abrir recetas</small>
         </button>
         <aside className="reservation-note">
           <span>Libro de reservas</span>

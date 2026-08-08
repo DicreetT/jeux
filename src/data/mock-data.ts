@@ -452,7 +452,7 @@ export const tips: Tip[] = [
     source: "cliente",
     amount: 32,
     stars: 5,
-    note: "Esto merece volver al menu, aunque no lo dire dos veces.",
+    note: "Esto merece volver a la carta de la casa, aunque no lo dire dos veces.",
     date: "2026-08-05",
   },
   {

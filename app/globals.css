@@ -60,41 +60,6 @@ button {
     linear-gradient(145deg, #120d09, #20130e 48%, #0d1b20);
 }
 
-.room-map {
-  position: fixed;
-  left: 50%;
-  top: 0.8rem;
-  z-index: 60;
-  display: flex;
-  max-width: calc(100vw - 1.5rem);
-  transform: translateX(-50%);
-  gap: 0.25rem;
-  overflow-x: auto;
-  padding: 0.35rem;
-  border: 1px solid rgba(239, 216, 174, 0.18);
-  border-radius: 999px;
-  background: rgba(17, 11, 7, 0.68);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(14px);
-}
-
-.map-link {
-  min-height: 2rem;
-  flex: 0 0 auto;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: #ead7bc;
-  padding: 0 0.7rem;
-  font-size: 0.78rem;
-}
-
-.map-link.active {
-  border-color: rgba(199, 168, 93, 0.55);
-  background: rgba(199, 168, 93, 0.16);
-  color: #fff2d4;
-}
-
 .room-stage {
   min-height: 100vh;
   padding: 0.75rem;
@@ -111,7 +76,9 @@ button {
 }
 
 .scene-image {
+  z-index: 0;
   object-fit: cover;
+  pointer-events: none;
 }
 
 .scene-vignette {
@@ -151,7 +118,6 @@ button {
   line-height: 0.9;
 }
 
-.back-mark,
 .room-toolbar button,
 .room-toolbar span {
   display: inline-flex;
@@ -240,7 +206,7 @@ button {
 .order-ticket,
 .challenge-tray,
 .prep-sheet,
-.review-ticket,
+.evaluation-sheet,
 .reserve-shelf,
 .ingredient-file,
 .receipt,
@@ -367,7 +333,7 @@ button {
 .reservation-note span,
 .client-docket span,
 .order-ticket span,
-.review-ticket span,
+.evaluation-sheet span,
 .ingredient-file span,
 .receipt span,
 .book-page span,
@@ -387,7 +353,7 @@ button {
 .reservation-note strong,
 .order-ticket strong,
 .receipt strong,
-.review-ticket strong {
+.evaluation-sheet strong {
   display: block;
   margin: 0.3rem 0;
   font-family: var(--font-display), Georgia, serif;
@@ -403,7 +369,7 @@ button {
 .reservation-note p,
 .client-docket p,
 .order-ticket p,
-.review-ticket p,
+.evaluation-sheet p,
 .ingredient-file p,
 .book-page p,
 .paper-room p,
@@ -415,11 +381,22 @@ button {
 }
 
 .reservation-note p {
-  grid-area: copy;
   margin: 0.2rem 0 0;
-  align-self: center;
   color: #3f2d1f;
   font-size: clamp(0.95rem, 1.55vw, 1.08rem);
+}
+
+.reservation-details {
+  grid-area: copy;
+  align-self: center;
+}
+
+.reservation-details small {
+  display: block;
+  color: #765539;
+  font-size: 0.78rem;
+  font-weight: 800;
+  line-height: 1.45;
 }
 
 .reservation-note button,
@@ -512,18 +489,60 @@ button {
   inset: auto 1rem 1rem 1rem;
   z-index: 5;
   display: grid;
-  grid-template-columns: 0.78fr 0.9fr 1.25fr 0.72fr;
+  grid-template-columns: 0.85fr 0.95fr 1.2fr;
   gap: 0.75rem;
   align-items: end;
 }
 
 .order-ticket,
 .challenge-tray,
-.prep-sheet,
-.review-ticket {
+.prep-sheet {
   padding: 0.85rem;
   max-height: 72vh;
   overflow: auto;
+}
+
+.evaluation-sheet {
+  position: absolute;
+  right: clamp(1rem, 7vw, 5rem);
+  bottom: clamp(1rem, 8vh, 5rem);
+  z-index: 5;
+  width: min(34rem, calc(100% - 2rem));
+  padding: 1.15rem;
+}
+
+.evaluation-sheet h2 {
+  margin: 0.25rem 0 0.55rem;
+  color: var(--ink);
+  font-family: var(--font-display), Georgia, serif;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1;
+}
+
+.evaluation-sheet dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+.evaluation-sheet div {
+  padding: 0.65rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.evaluation-sheet dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.evaluation-sheet dd {
+  margin: 0.2rem 0 0;
+  color: var(--ink);
+  font-weight: 900;
 }
 
 .challenge-tray h2 {
@@ -832,8 +851,7 @@ button {
 }
 
 .album-grid,
-.letter-board,
-.menu-columns {
+.letter-board {
   display: grid;
   gap: 1rem;
 }
@@ -844,8 +862,7 @@ button {
 
 .photo-card,
 .folded-letter,
-.write-letter,
-.menu-columns section {
+.write-letter {
   border: 1px solid rgba(83, 55, 34, 0.32);
   border-radius: 8px;
   background: rgba(255, 242, 212, 0.92);
@@ -879,14 +896,6 @@ button {
 
 .write-letter {
   background: rgba(236, 214, 180, 0.96);
-}
-
-.menu-columns {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-}
-
-.menu-columns section {
-  min-height: 20rem;
 }
 
 .progress-rail {
@@ -947,12 +956,6 @@ button {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .album-grid,
-  .letter-board,
-  .menu-columns {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .receipt {
     right: 4%;
     width: min(24rem, 44vw);
@@ -967,12 +970,6 @@ button {
   .scene-frame {
     min-height: 100vh;
     border-radius: 0;
-  }
-
-  .room-map {
-    left: 0.5rem;
-    right: 0.5rem;
-    transform: none;
   }
 
   .room-title {
@@ -993,6 +990,7 @@ button {
   .client-docket,
   .reserve-shelf,
   .receipt,
+  .evaluation-sheet,
   .purchase-tabs {
     left: 0.75rem;
     right: 0.75rem;
@@ -1058,7 +1056,6 @@ button {
   .shelf-items,
   .album-grid,
   .letter-board,
-  .menu-columns,
   .form-row {
     grid-template-columns: 1fr;
   }

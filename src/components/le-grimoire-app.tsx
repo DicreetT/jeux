@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { FormEvent, ReactNode, useMemo, useState } from "react";
 import {
-  clients,
   dishes as mockDishes,
   ingredients,
   letters,
@@ -30,9 +29,8 @@ type SectionId =
   | "grimoire"
   | "reserve"
   | "caisse"
-  | "plats"
   | "lettres"
-  | "menu";
+  | "evaluation";
 
 type Hotspot = {
   id: string;
@@ -52,9 +50,8 @@ const roomLabels: Record<SectionId, string> = {
   grimoire: "Le Grimoire",
   reserve: "La Reserve",
   caisse: "La Caisse",
-  plats: "Nos Plats",
   lettres: "Les Lettres",
-  menu: "Menu",
+  evaluation: "Evaluation",
 };
 
 const emptyDraft: DishDraft = {
@@ -84,10 +81,6 @@ const recipeFilters: Array<FlavorTag | "todos"> = [
 
 function userName(userId: string) {
   return users.find((user) => user.id === userId)?.displayName ?? "La casa";
-}
-
-function clientName(clientId?: string) {
-  return clients.find((client) => client.id === clientId)?.name ?? "Servicio privado";
 }
 
 function Stars({ value }: { value: number }) {
@@ -132,9 +125,6 @@ function Scene({
         <div className="scene-vignette" />
         {showTitle ? (
           <header className="room-title">
-            <button className="back-mark" type="button" onClick={() => onNavigate("home")}>
-              Salon
-            </button>
             <p>{subtitle}</p>
             <h1>{title}</h1>
           </header>
@@ -185,7 +175,7 @@ function Field({
 
 export function LeGrimoireApp() {
   const [activeSection, setActiveSection] = useState<SectionId>("home");
-  const [clientIndex, setClientIndex] = useState(1);
+  const clientIndex = 1;
   const [creatorId, setCreatorId] = useState("chef");
   const [ownIngredient, setOwnIngredient] = useState("");
   const [ownIngredients, setOwnIngredients] = useState<string[]>(["Yogur salado", "Tomillo"]);
@@ -241,14 +231,7 @@ export function LeGrimoireApp() {
     setOwnIngredient("");
   }
 
-  function nextClient() {
-    setClientIndex((current) => (current + 1) % clients.length);
-    setLastReview(null);
-    setActiveSection("comptoir");
-  }
-
-  function serveDish(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function completeService() {
     const dish = makeDishFromDraft({
       draft,
       client: activeClient,
@@ -274,6 +257,7 @@ export function LeGrimoireApp() {
       },
       ...current,
     ]);
+    setActiveSection("evaluation");
 
     if (draft.saveAsRecipe) {
       setSavedRecipes((current) => [
@@ -300,39 +284,25 @@ export function LeGrimoireApp() {
     }
   }
 
+  function serveDish(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    completeService();
+  }
+
   const salonHotspots: Hotspot[] = [
-    { id: "book-comptoir", label: "Le Comptoir", tooltip: "Ver cliente y pedido", x: 42, y: 72, target: "comptoir", variant: "book" },
     { id: "book-caisse", label: "La Caisse", tooltip: "Abrir recibo y saldo", x: 54, y: 73, target: "caisse", variant: "book" },
-    { id: "book-menu", label: "Menu", tooltip: "Menu fisico del restaurante", x: 48, y: 83, target: "menu", variant: "book" },
-    { id: "book-plats", label: "Nos Plats", tooltip: "Album de platos", x: 35, y: 83, target: "plats", variant: "book" },
     { id: "book-lettres", label: "Les Lettres", tooltip: "Correspondencia privada", x: 61, y: 83, target: "lettres", variant: "book" },
-    { id: "doors-cuisine", label: "Cuisine", tooltip: "Entrar por las puertas dobles", x: 50, y: 34, target: "cuisine", variant: "door" },
   ];
 
   const cuisineHotspots: Hotspot[] = [
     { id: "prep", label: "Mesa central", tooltip: "Continuar plato", x: 45, y: 63, variant: "object" },
     { id: "bell", label: "Pedido activo", tooltip: "Revisar comanda", x: 31, y: 39, variant: "quiet" },
     { id: "reserve-door", label: "Reserve", tooltip: "Ir a la despensa", x: 74, y: 33, target: "reserve", variant: "door" },
-    { id: "pass", label: "Pase", tooltip: "Servir cuando este listo", x: 80, y: 72, variant: "object" },
+    { id: "pass", label: "Pase", tooltip: "Servir cuando este listo", x: 80, y: 72, onClick: completeService, variant: "object" },
   ];
 
   return (
     <main className="restaurant-world">
-      <nav className="room-map" aria-label="Mapa del restaurante">
-        {(["home", "comptoir", "cuisine", "reserve", "grimoire", "caisse", "plats", "lettres", "menu"] as SectionId[]).map(
-          (room) => (
-            <button
-              key={room}
-              type="button"
-              className={activeSection === room ? "map-link active" : "map-link"}
-              onClick={() => setActiveSection(room)}
-            >
-              {roomLabels[room]}
-            </button>
-          ),
-        )}
-      </nav>
-
       <Scene
         title="Le Grimoire"
         subtitle="restaurant prive pour deux"
@@ -350,9 +320,13 @@ export function LeGrimoireApp() {
         <aside className="reservation-note">
           <span>Libro de reservas</span>
           <strong>{activeClient.name}</strong>
-          <p>{activeOrder.prompt}</p>
+          <div className="reservation-details">
+            <small>Mesa 3 · 21:00 · dificultad {activeClient.demandLevel}/5</small>
+            <p>{activeOrder.prompt}</p>
+            <small>Condiciones: {activeOrder.constraints.join(" · ")}</small>
+          </div>
           <button type="button" onClick={() => setActiveSection("comptoir")}>
-            Ver pedido
+            Voir la commande
           </button>
         </aside>
       </Scene>
@@ -364,10 +338,6 @@ export function LeGrimoireApp() {
         alt="Comptoir de restaurante con un cliente esperando su pedido"
         active={activeSection === "comptoir"}
         onNavigate={setActiveSection}
-        hotspots={[
-          { id: "accept", label: "Aceptar pedido", tooltip: "Pasar a cocina", x: 73, y: 69, onClick: () => setActiveSection("cuisine"), variant: "object" },
-          { id: "next", label: "Otro cliente", tooltip: "Cambiar comensal", x: 21, y: 31, onClick: nextClient, variant: "quiet" },
-        ]}
       >
         <aside className="client-docket">
           <div className="docket-top">
@@ -378,17 +348,24 @@ export function LeGrimoireApp() {
           <p>{activeClient.personality}</p>
           <dl>
             <div>
+              <dt>Pide</dt>
+              <dd>{activeOrder.prompt}</dd>
+            </div>
+            <div>
               <dt>Prefiere</dt>
               <dd>{activeClient.preferences.join(", ")}</dd>
             </div>
             <div>
-              <dt>Restricciones</dt>
+              <dt>Ingredientes prohibidos</dt>
               <dd>{activeClient.hatedIngredients.join(", ")}</dd>
             </div>
+            <div>
+              <dt>Condiciones</dt>
+              <dd>{activeOrder.constraints.join(", ")}</dd>
+            </div>
           </dl>
-          <blockquote>{activeOrder.prompt}</blockquote>
           <button className="scene-action" type="button" onClick={() => setActiveSection("cuisine")}>
-            Aceptar pedido
+            Accepter la commande
           </button>
         </aside>
       </Scene>
@@ -466,25 +443,48 @@ export function LeGrimoireApp() {
               <input type="checkbox" checked={draft.saveAsRecipe} onChange={(event) => updateDraft("saveAsRecipe", event.target.checked)} />
               Guardar en Le Grimoire
             </label>
-            <button className="scene-action" type="submit">
+            <button className="scene-action" type="button" onClick={completeService}>
               Servir plato
             </button>
           </section>
 
-          <section className="review-ticket">
-            <span>Reseña</span>
-            {lastReview ? (
-              <>
-                <Stars value={lastReview.stars} />
-                <strong>{lastReview.tipAmount} monedas</strong>
-                <p>{lastReview.comment}</p>
-                {lastReview.complaint ? <small>{lastReview.complaint}</small> : <small>Sin queja formal.</small>}
-              </>
-            ) : (
-              <p>La reseña aparecera despues de servir.</p>
-            )}
-          </section>
         </form>
+      </Scene>
+
+      <Scene
+        title="Evaluation"
+        subtitle="le client goute le plat"
+        image="/scenes/salon/salon.png"
+        alt="Salon del restaurante durante la evaluacion del plato"
+        active={activeSection === "evaluation"}
+        onNavigate={setActiveSection}
+      >
+        <aside className="evaluation-sheet">
+          <span>Evaluation</span>
+          {lastReview ? (
+            <>
+              <h2>{draft.name}</h2>
+              <Stars value={lastReview.stars} />
+              <p>{lastReview.comment}</p>
+              {lastReview.complaint ? <small>{lastReview.complaint}</small> : <small>Commande respetada sin queja formal.</small>}
+              <dl>
+                <div>
+                  <dt>Respect de la commande</dt>
+                  <dd>{lastReview.stars >= 4 ? "bien" : "a revisar"}</dd>
+                </div>
+                <div>
+                  <dt>Propina</dt>
+                  <dd>{lastReview.tipAmount} monedas</dd>
+                </div>
+              </dl>
+              <button className="scene-action" type="button" onClick={() => setActiveSection("home")}>
+                Volver al salon
+              </button>
+            </>
+          ) : (
+            <p>Primero hay que servir un plato.</p>
+          )}
+        </aside>
       </Scene>
 
       <Scene
@@ -616,30 +616,6 @@ export function LeGrimoireApp() {
         </div>
       </Scene>
 
-      {activeSection === "plats" ? (
-        <section className="paper-room album-room">
-          <RoomToolbar active={activeSection} onNavigate={setActiveSection} />
-          <h1>Nos Plats</h1>
-          <p>Album privado de platos servidos.</p>
-          <div className="album-grid">
-            {savedDishes.map((dish) => (
-              <article className="photo-card" key={dish.id}>
-                <div className="plate-print">{dish.name.slice(0, 2)}</div>
-                <h2>{dish.name}</h2>
-                <p>{dish.story}</p>
-                <small>
-                  {userName(dish.creatorId)} · {clientName(dish.clientId)} · {dish.date}
-                </small>
-                <footer>
-                  <Stars value={dish.rating ?? 0} />
-                  <span>{dish.tipAmount ?? 0} monedas</span>
-                </footer>
-              </article>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {activeSection === "lettres" ? (
         <section className="paper-room letters-room">
           <RoomToolbar active={activeSection} onNavigate={setActiveSection} />
@@ -661,23 +637,6 @@ export function LeGrimoireApp() {
               <p>Chef, quedan 3 frascos de cardamomo. Alguien ha vuelto a esconder la canela.</p>
               <button type="button">Dejar sobre el comptoir</button>
             </aside>
-          </div>
-        </section>
-      ) : null}
-
-      {activeSection === "menu" ? (
-        <section className="paper-room menu-room">
-          <RoomToolbar active={activeSection} onNavigate={setActiveSection} />
-          <h1>Menu</h1>
-          <div className="menu-columns">
-            {["Entrees", "Plats", "Desserts", "Boissons", "Creations etranges"].map((category) => (
-              <section key={category}>
-                <h2>{category}</h2>
-                {savedDishes.slice(0, 3).map((dish) => (
-                  <p key={`${category}-${dish.id}`}>{dish.name}</p>
-                ))}
-              </section>
-            ))}
           </div>
         </section>
       ) : null}

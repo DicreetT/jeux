@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { FormEvent, ReactNode, useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import {
   dishes as mockDishes,
   ingredients,
@@ -36,12 +36,16 @@ type Hotspot = {
   id: string;
   label: string;
   tooltip: string;
-  x: number;
-  y: number;
+  xPercent: number;
+  yPercent: number;
+  widthPercent?: number;
+  heightPercent?: number;
   target?: SectionId;
   onClick?: () => void;
-  variant?: "book" | "door" | "object" | "quiet";
+  variant?: "book" | "door" | "object" | "quiet" | "exit";
 };
+
+type CuisinePhase = "commande" | "mise" | "cuisson" | "service";
 
 const roomLabels: Record<SectionId, string> = {
   home: "Salon",
@@ -78,6 +82,17 @@ const recipeFilters: Array<FlavorTag | "todos"> = [
   "experimental",
   "favoritos",
 ];
+
+const cuisinePhases: Array<{ id: CuisinePhase; label: string }> = [
+  { id: "commande", label: "Commande" },
+  { id: "mise", label: "Mise en place" },
+  { id: "cuisson", label: "Cuisson" },
+  { id: "service", label: "Service" },
+];
+
+const cookingStations = ["Table", "Sartén", "Olla", "Horno", "Mortero"];
+
+const cookingTechniques = ["couper", "émincer", "mariner", "saisir", "braiser", "confire", "rôtir", "émulsionner"];
 
 function userName(userId: string) {
   return users.find((user) => user.id === userId)?.displayName ?? "La casa";
@@ -141,7 +156,12 @@ function Scene({
             key={hotspot.id}
             type="button"
             className={`hotspot ${hotspot.variant ?? "object"}`}
-            style={{ left: `${hotspot.x}%`, top: `${hotspot.y}%` }}
+            style={{
+              left: `${hotspot.xPercent}%`,
+              top: `${hotspot.yPercent}%`,
+              width: hotspot.widthPercent ? `${hotspot.widthPercent}%` : undefined,
+              height: hotspot.heightPercent ? `${hotspot.heightPercent}%` : undefined,
+            }}
             onClick={() => (hotspot.onClick ? hotspot.onClick() : hotspot.target ? onNavigate(hotspot.target) : undefined)}
             aria-label={hotspot.tooltip}
           >
@@ -184,6 +204,10 @@ export function LeGrimoireApp() {
   const [activeSection, setActiveSection] = useState<SectionId>("home");
   const clientIndex = 1;
   const [creatorId, setCreatorId] = useState("chef");
+  const [cuisinePhase, setCuisinePhase] = useState<CuisinePhase>("commande");
+  const [selectedCookIngredient, setSelectedCookIngredient] = useState("");
+  const [selectedStation, setSelectedStation] = useState("Olla");
+  const [cookingActions, setCookingActions] = useState<string[]>([]);
   const [ownIngredient, setOwnIngredient] = useState("");
   const [ownIngredients, setOwnIngredients] = useState<string[]>(["Yogur salado", "Tomillo"]);
   const [draft, setDraft] = useState<DishDraft>({
@@ -227,6 +251,22 @@ export function LeGrimoireApp() {
     return savedRecipes.filter((recipe) => recipe.tags.includes(recipeFilter));
   }, [recipeFilter, savedRecipes]);
 
+  const serviceDraft = useMemo<DishDraft>(() => {
+    const technique = cookingActions.length > 0 ? cookingActions.join(", ") : "mise en place simple, cuisson a definir";
+    const preparation =
+      cookingActions.length > 0
+        ? cookingActions.map((action, index) => `${index + 1}. ${action}.`).join(" ")
+        : "Mise en place realisee, cuisson a confirmer avant le service.";
+
+    return {
+      ...draft,
+      technique,
+      preparation,
+      presentation: "Dressage sobre au passe.",
+      story: "",
+    };
+  }, [cookingActions, draft]);
+
   function updateDraft<K extends keyof DishDraft>(key: K, value: DishDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -238,16 +278,22 @@ export function LeGrimoireApp() {
     setOwnIngredient("");
   }
 
+  function addCookingAction(technique: string) {
+    const ingredient = selectedCookIngredient || challengeIngredients[0];
+    const action = `${technique} ${ingredient.toLowerCase()} (${selectedStation.toLowerCase()})`;
+    setCookingActions((current) => [...current, action]);
+  }
+
   function completeService() {
     const dish = makeDishFromDraft({
-      draft,
+      draft: serviceDraft,
       client: activeClient,
       order: activeOrder,
       boxIngredients: challengeIngredients,
       ownIngredients,
       creatorId,
     });
-    const review = generateReview(activeClient, dish, draft);
+    const review = generateReview(activeClient, dish, serviceDraft);
     const completedDish = { ...dish, rating: review.stars, tipAmount: review.tipAmount };
 
     setSavedDishes((current) => [completedDish, ...current]);
@@ -274,13 +320,13 @@ export function LeGrimoireApp() {
           authorId: creatorId,
           date: dish.date,
           ingredients: [...challengeIngredients, ...ownIngredients],
-          quantities: draft.quantities || "cantidades pendientes de afinar",
-          steps: [draft.technique || "Elegir tecnica", draft.preparation || "Preparar y ajustar"],
+          quantities: serviceDraft.quantities || "cantidades pendientes de afinar",
+          steps: cookingActions.length > 0 ? cookingActions : [serviceDraft.preparation],
           difficulty: activeClient.demandLevel >= 4 ? "ritual" : "media",
           time: "por medir",
-          notes: [draft.chefNote, draft.serverNote].filter(Boolean).join(" / "),
+          notes: [serviceDraft.chefNote, serviceDraft.serverNote].filter(Boolean).join(" / "),
           nextChange: "Anotar tiempo real y ajustar emplatado.",
-          story: draft.story,
+          story: serviceDraft.story,
           origin: "Le Comptoir",
           tags: ["experimental", activeOrder.prompt.includes("postre") ? "dulce" : "salado"],
           favorite: false,
@@ -291,23 +337,18 @@ export function LeGrimoireApp() {
     }
   }
 
-  function serveDish(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    completeService();
-  }
-
   const salonHotspots: Hotspot[] = [
-    { id: "doors-cuisine", label: "Cuisine", tooltip: "Entrar sin comanda", x: 61, y: 28, target: "cuisine", variant: "quiet" },
-    { id: "book-caisse", label: "La Caisse", tooltip: "Abrir recibo y saldo", x: 54, y: 73, target: "caisse", variant: "book" },
-    { id: "book-lettres", label: "Les Lettres", tooltip: "Correspondencia privada", x: 61, y: 83, target: "lettres", variant: "book" },
+    { id: "doors-cuisine", label: "Cuisine", tooltip: "Entrar sin comanda", xPercent: 61, yPercent: 28, widthPercent: 9, heightPercent: 7, target: "cuisine", variant: "quiet" },
+    { id: "book-caisse", label: "La Caisse", tooltip: "Abrir recibo y saldo", xPercent: 54, yPercent: 73, widthPercent: 9, heightPercent: 6, target: "caisse", variant: "book" },
+    { id: "book-lettres", label: "Les Lettres", tooltip: "Correspondencia privada", xPercent: 61, yPercent: 83, widthPercent: 9, heightPercent: 6, target: "lettres", variant: "book" },
   ];
 
   const cuisineHotspots: Hotspot[] = [
-    { id: "prep", label: "Mesa central", tooltip: "Continuar plato", x: 45, y: 63, variant: "object" },
-    { id: "bell", label: "Pedido activo", tooltip: "Revisar comanda", x: 31, y: 39, variant: "quiet" },
-    { id: "reserve-door", label: "Reserve", tooltip: "Ir a la despensa", x: 74, y: 33, target: "reserve", variant: "door" },
-    { id: "service-door", label: "Pause", tooltip: "Sortie de service", x: 17, y: 48, target: "lettres", variant: "quiet" },
-    { id: "pass", label: "Pase", tooltip: "Servir cuando este listo", x: 80, y: 72, onClick: completeService, variant: "object" },
+    { id: "prep", label: "Mise", tooltip: "Mesa de mise en place", xPercent: 45, yPercent: 62, widthPercent: 15, heightPercent: 9, onClick: () => setCuisinePhase("mise"), variant: "object" },
+    { id: "bell", label: "Commande", tooltip: "Revisar comanda", xPercent: 31, yPercent: 39, widthPercent: 10, heightPercent: 6, onClick: () => setCuisinePhase("commande"), variant: "quiet" },
+    { id: "reserve-door", label: "La Réserve", tooltip: "Ir a la despensa", xPercent: 74, yPercent: 33, widthPercent: 12, heightPercent: 12, target: "reserve", variant: "door" },
+    { id: "service-door", label: "EXIT", tooltip: "Sortie de service", xPercent: 17, yPercent: 48, widthPercent: 9, heightPercent: 8, target: "lettres", variant: "exit" },
+    { id: "pass", label: "Pase", tooltip: "Servir cuando este listo", xPercent: 80, yPercent: 72, widthPercent: 12, heightPercent: 8, onClick: () => setCuisinePhase("service"), variant: "object" },
   ];
 
   return (
@@ -326,17 +367,34 @@ export function LeGrimoireApp() {
         <button className="closed-grimoire" type="button" onClick={() => setActiveSection("grimoire")} aria-label="Abrir el libro de recetas">
           <span>Le Grimoire</span>
         </button>
-        <aside className="reservation-note">
-          <span>Libro de reservas</span>
-          <strong>{activeClient.name}</strong>
-          <div className="reservation-details">
-            <small>Mesa 3 · 21:00 · dificultad {activeClient.demandLevel}/5</small>
+        <aside className="reservation-book">
+          <section className="reservation-page left">
+            <span>Livre de réservations</span>
+            <strong>{activeClient.name}</strong>
+            <dl>
+              <div>
+                <dt>Table</dt>
+                <dd>3</dd>
+              </div>
+              <div>
+                <dt>Heure</dt>
+                <dd>21:00</dd>
+              </div>
+            </dl>
+            <small className="reservation-seal">Service privé</small>
+          </section>
+          <section className="reservation-page right">
+            <span>Commande</span>
             <p>{activeOrder.prompt}</p>
-            <small>Condiciones: {activeOrder.constraints.join(" · ")}</small>
-          </div>
-          <button type="button" onClick={() => setActiveSection("comptoir")}>
-            Voir la commande
-          </button>
+            <small>{activeOrder.constraints.slice(0, 3).join(" · ")}</small>
+            <div className="reservation-difficulty">
+              <b>Difficulté</b>
+              <Stars value={activeClient.demandLevel} />
+            </div>
+            <button type="button" onClick={() => setActiveSection("comptoir")}>
+              Voir la commande
+            </button>
+          </section>
         </aside>
       </Scene>
 
@@ -348,29 +406,25 @@ export function LeGrimoireApp() {
         active={activeSection === "comptoir"}
         onNavigate={setActiveSection}
       >
-        <aside className="client-docket">
-          <div className="docket-top">
-            <span>{activeClient.archetype}</span>
-            <Stars value={activeClient.demandLevel} />
-          </div>
+        <aside className="client-ticket">
+          <span>Client</span>
           <h2>{activeClient.name}</h2>
-          <p>{activeClient.personality}</p>
           <dl>
             <div>
-              <dt>Pide</dt>
+              <dt>Commande</dt>
               <dd>{activeOrder.prompt}</dd>
             </div>
             <div>
-              <dt>Prefiere</dt>
-              <dd>{activeClient.preferences.join(", ")}</dd>
+              <dt>Contraintes</dt>
+              <dd>{activeOrder.constraints.join(", ")}</dd>
             </div>
             <div>
-              <dt>Ingredientes prohibidos</dt>
+              <dt>À éviter</dt>
               <dd>{activeClient.hatedIngredients.join(", ")}</dd>
             </div>
             <div>
-              <dt>Condiciones</dt>
-              <dd>{activeOrder.constraints.join(", ")}</dd>
+              <dt>Difficulté</dt>
+              <dd><Stars value={activeClient.demandLevel} /></dd>
             </div>
           </dl>
           <button className="scene-action" type="button" onClick={() => setActiveSection("cuisine")}>
@@ -388,76 +442,123 @@ export function LeGrimoireApp() {
         hotspots={cuisineHotspots}
         onNavigate={setActiveSection}
       >
-        <form className="kitchen-workbench" onSubmit={serveDish}>
-          <section className="order-ticket">
-            <span>Comanda</span>
+        <div className="phase-indicator" aria-label="Fases de cocina">
+          {cuisinePhases.map((phase, index) => (
+            <button key={phase.id} type="button" className={cuisinePhase === phase.id ? "active" : ""} onClick={() => setCuisinePhase(phase.id)}>
+              <span>{index + 1}</span>
+              {phase.label}
+            </button>
+          ))}
+        </div>
+
+        {cuisinePhase === "commande" ? (
+          <section className="phase-panel commande-ticket">
+            <span>Commande</span>
             <strong>{activeClient.name}</strong>
             <p>{activeOrder.prompt}</p>
-            <small>Tiempo estimado: 45 min · Tecnica sugerida: {mysteryBox.technique}</small>
-          </section>
-
-          <section className="challenge-tray">
-            <h2>Ingredientes del reto</h2>
+            <small>{activeOrder.constraints.join(" · ")}</small>
             <div className="ingredient-lines">
-              {challengeIngredients.map((ingredient) => (
+              {challengeIngredients.slice(0, 4).map((ingredient) => (
                 <span key={ingredient}>{ingredient}</span>
               ))}
             </div>
-            <h2>Ingredientes añadidos por el Chef</h2>
-            <div className="add-ingredient">
-              <input
-                value={ownIngredient}
-                onChange={(event) => setOwnIngredient(event.target.value)}
-                placeholder="añadir ingrediente"
-                aria-label="Ingrediente añadido"
-              />
-              <button type="button" onClick={addOwnIngredient}>
-                +
-              </button>
+            <button className="scene-action" type="button" onClick={() => setCuisinePhase("mise")}>
+              Commencer la mise en place
+            </button>
+          </section>
+        ) : null}
+
+        {cuisinePhase === "mise" ? (
+          <section className="phase-panel mise-panel">
+            <span>Mise en place</span>
+            <h2>Table centrale</h2>
+            <div className="mise-columns">
+              <div>
+                <h3>Ingrédients imposés</h3>
+                <div className="ingredient-lines">
+                  {challengeIngredients.map((ingredient) => (
+                    <button key={ingredient} type="button" onClick={() => setSelectedCookIngredient(ingredient)}>
+                      {ingredient}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h3>Ajouts du Chef</h3>
+                <div className="add-ingredient">
+                  <input value={ownIngredient} onChange={(event) => setOwnIngredient(event.target.value)} placeholder="ajouter" aria-label="Ingrediente añadido" />
+                  <button type="button" onClick={addOwnIngredient}>+</button>
+                </div>
+                <div className="ingredient-lines own">
+                  {ownIngredients.map((ingredient) => (
+                    <button key={ingredient} type="button" onClick={() => setSelectedCookIngredient(ingredient)}>
+                      {ingredient}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="ingredient-lines own">
-              {ownIngredients.map((ingredient) => (
-                <button key={ingredient} type="button" onClick={() => setOwnIngredients((items) => items.filter((item) => item !== ingredient))}>
-                  {ingredient}
+            <button className="scene-action" type="button" onClick={() => setCuisinePhase("cuisson")}>
+              Passer en cuisson
+            </button>
+          </section>
+        ) : null}
+
+        {cuisinePhase === "cuisson" ? (
+          <section className="phase-panel cuisson-panel">
+            <span>Cuisson</span>
+            <h2>{selectedCookIngredient || challengeIngredients[0]}</h2>
+            <div className="station-row">
+              {cookingStations.map((station) => (
+                <button key={station} type="button" className={selectedStation === station ? "active" : ""} onClick={() => setSelectedStation(station)}>
+                  {station}
                 </button>
               ))}
             </div>
-          </section>
-
-          <section className="prep-sheet">
-            <div className="form-row">
-              <Field label="Nombre del plato" value={draft.name} onChange={(value) => updateDraft("name", value)} />
-              <label className="field">
-                <span>Creador principal</span>
-                <select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            <div className="technique-grid">
+              {cookingTechniques.map((technique) => (
+                <button key={technique} type="button" onClick={() => addCookingAction(technique)}>
+                  {technique}
+                </button>
+              ))}
             </div>
-            <Field label="Cantidades" value={draft.quantities} onChange={(value) => updateDraft("quantities", value)} />
-            <Field label="Tecnica" value={draft.technique} onChange={(value) => updateDraft("technique", value)} />
-            <Field label="Preparacion" value={draft.preparation} onChange={(value) => updateDraft("preparation", value)} multiline />
-            <Field label="Presentacion" value={draft.presentation} onChange={(value) => updateDraft("presentation", value)} multiline />
-            <div className="form-row">
-              <Field label="Nota del Chef" value={draft.chefNote} onChange={(value) => updateDraft("chefNote", value)} multiline />
-              <Field label="Nota de la Mesera" value={draft.serverNote} onChange={(value) => updateDraft("serverNote", value)} multiline />
-            </div>
-            <Field label="Historia breve" value={draft.story} onChange={(value) => updateDraft("story", value)} multiline />
-            <Field label="Maridaje" value={draft.pairing} onChange={(value) => updateDraft("pairing", value)} />
-            <label className="check-row">
-              <input type="checkbox" checked={draft.saveAsRecipe} onChange={(event) => updateDraft("saveAsRecipe", event.target.checked)} />
-              Guardar en Le Grimoire
-            </label>
-            <button className="scene-action" type="button" onClick={completeService}>
-              Servir plato
+            <ol className="action-log">
+              {cookingActions.length > 0 ? cookingActions.map((action) => <li key={action}>{action}</li>) : <li>Choisir un ingrédient puis une technique.</li>}
+            </ol>
+            <button className="scene-action" type="button" onClick={() => setCuisinePhase("service")}>
+              Aller au passe
             </button>
           </section>
+        ) : null}
 
-        </form>
+        {cuisinePhase === "service" ? (
+          <section className="phase-panel service-panel">
+            <span>Service</span>
+            <Field label="Nom du plat" value={draft.name} onChange={(value) => updateDraft("name", value)} />
+            <div className="form-row">
+              <Field label="Note du Chef" value={draft.chefNote} onChange={(value) => updateDraft("chefNote", value)} multiline />
+              <Field label="Note de la Mesera" value={draft.serverNote} onChange={(value) => updateDraft("serverNote", value)} multiline />
+            </div>
+            <Field label="Maridage" value={draft.pairing} onChange={(value) => updateDraft("pairing", value)} />
+            <label className="field">
+              <span>Créateur principal</span>
+              <select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.displayName}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="check-row">
+              <input type="checkbox" checked={draft.saveAsRecipe} onChange={(event) => updateDraft("saveAsRecipe", event.target.checked)} />
+              Garder dans Le Grimoire
+            </label>
+            <button className="scene-action" type="button" onClick={completeService}>
+              Servir le plat
+            </button>
+          </section>
+        ) : null}
       </Scene>
 
       <Scene
@@ -504,7 +605,7 @@ export function LeGrimoireApp() {
         active={activeSection === "reserve"}
         onNavigate={setActiveSection}
         hotspots={[
-          { id: "back-kitchen", label: "Cuisine", tooltip: "Volver a cocina", x: 51, y: 43, target: "cuisine", variant: "door" },
+          { id: "back-kitchen", label: "Cuisine", tooltip: "Volver a cocina", xPercent: 51, yPercent: 43, widthPercent: 12, heightPercent: 10, target: "cuisine", variant: "door" },
         ]}
       >
         <div className="reserve-shelf">
@@ -552,8 +653,8 @@ export function LeGrimoireApp() {
         active={activeSection === "grimoire"}
         onNavigate={setActiveSection}
         hotspots={[
-          { id: "prev-page", label: "‹", tooltip: "Pagina anterior", x: 24, y: 87, onClick: () => setBookIndex((index) => Math.max(0, index - 1)), variant: "quiet" },
-          { id: "next-page", label: "›", tooltip: "Pagina siguiente", x: 76, y: 87, onClick: () => setBookIndex((index) => index + 1), variant: "quiet" },
+          { id: "prev-page", label: "‹", tooltip: "Pagina anterior", xPercent: 24, yPercent: 87, widthPercent: 6, heightPercent: 6, onClick: () => setBookIndex((index) => Math.max(0, index - 1)), variant: "quiet" },
+          { id: "next-page", label: "›", tooltip: "Pagina siguiente", xPercent: 76, yPercent: 87, widthPercent: 6, heightPercent: 6, onClick: () => setBookIndex((index) => index + 1), variant: "quiet" },
         ]}
       >
         <div className="book-overlay">

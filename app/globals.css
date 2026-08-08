@@ -227,8 +227,10 @@ button {
   font-size: 0.9rem;
 }
 
-.reservation-note,
-.client-docket,
+.reservation-book,
+.reservation-page,
+.client-ticket,
+.phase-panel,
 .order-ticket,
 .challenge-tray,
 .prep-sheet,
@@ -249,22 +251,18 @@ button {
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
 }
 
-.reservation-note {
+.reservation-book {
   position: absolute;
   left: 50%;
-  bottom: 6%;
+  bottom: 3.2%;
   z-index: 5;
   display: grid;
-  width: min(42rem, calc(100% - 2rem));
-  min-height: 12.5rem;
-  grid-template-columns: 0.9fr 1.1fr;
-  grid-template-areas:
-    "label copy"
-    "name copy"
-    "button button";
-  column-gap: 2rem;
+  width: min(60rem, calc(100% - 2.5rem));
+  min-height: clamp(12rem, 25vh, 16rem);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  column-gap: clamp(1.6rem, 4vw, 4.2rem);
   transform: translateX(-50%);
-  padding: 1.35rem 1.55rem 1.15rem;
+  padding: clamp(1rem, 2.4vw, 1.6rem) clamp(1.1rem, 3vw, 2.1rem);
   border-color: rgba(107, 71, 42, 0.66);
   border-radius: 7px 14px 14px 7px;
   background:
@@ -276,28 +274,88 @@ button {
     0 18px 50px rgba(0, 0, 0, 0.46),
     inset 0 0 0 1px rgba(255, 249, 226, 0.34),
     inset 0 0 38px rgba(87, 47, 24, 0.22);
+  pointer-events: auto;
 }
 
-.reservation-note::before,
-.reservation-note::after {
+.reservation-book::before,
+.reservation-book::after {
   position: absolute;
   content: "";
   pointer-events: none;
 }
 
-.reservation-note::before {
+.reservation-book::before {
   inset: 0.5rem;
   border: 1px solid rgba(99, 57, 31, 0.22);
   border-radius: 5px 12px 12px 5px;
 }
 
-.reservation-note::after {
+.reservation-book::after {
   left: 50%;
   top: 0.85rem;
   bottom: 0.85rem;
   width: 1px;
   background: linear-gradient(180deg, transparent, rgba(58, 32, 19, 0.46), transparent);
   box-shadow: -4px 0 12px rgba(65, 35, 20, 0.16), 4px 0 12px rgba(255, 248, 224, 0.22);
+}
+
+.reservation-page {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  align-content: start;
+  gap: clamp(0.35rem, 1vw, 0.65rem);
+  min-width: 0;
+  max-height: clamp(10rem, 22vh, 14rem);
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: clamp(0.35rem, 1vw, 0.7rem);
+  pointer-events: auto;
+}
+
+.reservation-page.right {
+  position: relative;
+  padding-left: clamp(0.8rem, 2vw, 1.4rem);
+  padding-bottom: 3.2rem;
+}
+
+.reservation-page dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.reservation-page dt,
+.reservation-page b {
+  color: var(--muted);
+  font-size: clamp(0.62rem, 1.1vw, 0.74rem);
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.reservation-page dd {
+  margin: 0.1rem 0 0;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.reservation-seal {
+  width: fit-content;
+  border: 1px solid rgba(109, 31, 44, 0.28);
+  border-radius: 999px;
+  color: var(--burgundy);
+  padding: 0.2rem 0.55rem;
+  font-weight: 900;
+}
+
+.reservation-difficulty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
 }
 
 .closed-grimoire {
@@ -348,8 +406,9 @@ button {
   font-weight: 700;
 }
 
-.reservation-note span,
-.client-docket span,
+.reservation-page span,
+.client-ticket span,
+.phase-panel span,
 .order-ticket span,
 .evaluation-sheet span,
 .ingredient-file span,
@@ -363,12 +422,7 @@ button {
   text-transform: uppercase;
 }
 
-.reservation-note span {
-  grid-area: label;
-  align-self: end;
-}
-
-.reservation-note strong,
+.reservation-page strong,
 .order-ticket strong,
 .receipt strong,
 .evaluation-sheet strong {
@@ -379,13 +433,13 @@ button {
   line-height: 1.05;
 }
 
-.reservation-note strong {
-  grid-area: name;
-  font-size: clamp(1.55rem, 3vw, 2.25rem);
+.reservation-page strong {
+  font-size: clamp(1.35rem, 2.6vw, 2.1rem);
 }
 
-.reservation-note p,
-.client-docket p,
+.reservation-page p,
+.client-ticket p,
+.phase-panel p,
 .order-ticket p,
 .evaluation-sheet p,
 .ingredient-file p,
@@ -398,26 +452,21 @@ button {
   line-height: 1.55;
 }
 
-.reservation-note p {
+.reservation-page p {
   margin: 0.2rem 0 0;
   color: #3f2d1f;
-  font-size: clamp(0.95rem, 1.55vw, 1.08rem);
+  font-size: clamp(0.82rem, 1.35vw, 1rem);
 }
 
-.reservation-details {
-  grid-area: copy;
-  align-self: center;
-}
-
-.reservation-details small {
+.reservation-page small {
   display: block;
   color: #765539;
-  font-size: 0.78rem;
+  font-size: clamp(0.66rem, 1.05vw, 0.78rem);
   font-weight: 800;
   line-height: 1.45;
 }
 
-.reservation-note button,
+.reservation-page button,
 .scene-action,
 .purchase-tabs button,
 .write-letter button {
@@ -430,20 +479,31 @@ button {
   font-weight: 800;
 }
 
-.reservation-note button {
-  grid-area: button;
-  justify-self: center;
-  min-width: 9rem;
-  margin-top: 0.85rem;
+.reservation-page button {
+  position: absolute;
+  left: clamp(0.8rem, 2vw, 1.4rem);
+  bottom: 0.35rem;
+  z-index: 2;
+  justify-self: start;
+  min-width: 8.5rem;
 }
 
-.client-docket {
+.client-ticket {
   position: absolute;
-  right: clamp(1rem, 5vw, 4rem);
-  top: 19%;
+  right: clamp(1rem, 4vw, 3.5rem);
+  bottom: clamp(1rem, 6vh, 4rem);
   z-index: 5;
-  width: min(34rem, calc(100% - 2rem));
-  padding: 1.1rem;
+  width: min(26rem, 38vw);
+  max-height: 56vh;
+  overflow: auto;
+  padding: 1rem 1rem 4.3rem;
+  transform: rotate(-0.8deg);
+}
+
+.client-ticket .scene-action {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
 }
 
 .docket-top,
@@ -456,13 +516,14 @@ button {
   gap: 0.8rem;
 }
 
-.client-docket h2,
+.client-ticket h2,
 .ingredient-file h2,
 .book-page h2,
 .paper-room h2,
 .photo-card h2,
 .folded-letter h2,
 .write-letter h2,
+.phase-panel h2,
 .prep-sheet h2,
 .challenge-tray h2 {
   margin: 0.25rem 0 0.55rem;
@@ -472,14 +533,14 @@ button {
   line-height: 1.08;
 }
 
-.client-docket dl,
+.client-ticket dl,
 .ingredient-file dl {
   display: grid;
   gap: 0.55rem;
   margin: 0.8rem 0;
 }
 
-.client-docket dt,
+.client-ticket dt,
 .ingredient-file dt {
   color: var(--muted);
   font-size: 0.72rem;
@@ -487,37 +548,108 @@ button {
   text-transform: uppercase;
 }
 
-.client-docket dd,
+.client-ticket dd,
 .ingredient-file dd {
   margin: 0.1rem 0 0;
   color: var(--ink);
+  line-height: 1.35;
 }
 
-.client-docket blockquote {
-  margin: 0.85rem 0;
-  padding: 0.85rem;
-  border-left: 3px solid var(--copper);
-  background: rgba(255, 255, 255, 0.32);
-  color: #3d2b1e;
-  line-height: 1.5;
-}
-
-.kitchen-workbench {
+.phase-indicator {
   position: absolute;
-  inset: auto 1rem 1rem 1rem;
-  z-index: 5;
-  display: grid;
-  grid-template-columns: 0.85fr 0.95fr 1.2fr;
-  gap: 0.75rem;
-  align-items: end;
+  left: 50%;
+  top: 1rem;
+  z-index: 6;
+  display: flex;
+  max-width: min(42rem, calc(100% - 7rem));
+  transform: translateX(-50%);
+  gap: 0.35rem;
+  overflow-x: auto;
+  border: 1px solid rgba(239, 216, 174, 0.18);
+  border-radius: 999px;
+  background: rgba(17, 11, 7, 0.42);
+  padding: 0.35rem;
+  backdrop-filter: blur(12px);
 }
 
-.order-ticket,
-.challenge-tray,
-.prep-sheet {
-  padding: 0.85rem;
-  max-height: 72vh;
+.phase-indicator button {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #ead7bc;
+  padding: 0 0.65rem;
+  font-size: 0.74rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.phase-indicator button.active {
+  border-color: rgba(199, 168, 93, 0.55);
+  background: rgba(199, 168, 93, 0.16);
+  color: var(--paper-light);
+}
+
+.phase-indicator span {
+  display: grid;
+  width: 1.25rem;
+  height: 1.25rem;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 242, 212, 0.14);
+  font-size: 0.68rem;
+}
+
+.phase-panel {
+  position: absolute;
+  z-index: 5;
+  width: min(27rem, calc(100% - 2rem));
+  max-height: min(52vh, 26rem);
   overflow: auto;
+  padding: 0.95rem 0.95rem 4.4rem;
+}
+
+.phase-panel .scene-action {
+  position: sticky;
+  bottom: 0;
+  margin-top: 0.75rem;
+}
+
+.commande-ticket {
+  left: clamp(1rem, 4vw, 3rem);
+  bottom: clamp(1rem, 6vh, 3rem);
+  width: min(24rem, 36vw);
+  transform: rotate(-0.6deg);
+}
+
+.mise-panel {
+  left: 50%;
+  bottom: clamp(1rem, 5vh, 2rem);
+  width: min(44rem, calc(100% - 2rem));
+  transform: translateX(-50%);
+}
+
+.cuisson-panel,
+.service-panel {
+  right: clamp(1rem, 5vw, 4rem);
+  bottom: clamp(1rem, 6vh, 3rem);
+}
+
+.mise-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.mise-columns h3 {
+  margin: 0 0 0.45rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .evaluation-sheet {
@@ -586,9 +718,52 @@ button {
   font-weight: 800;
 }
 
+.ingredient-lines button {
+  cursor: pointer;
+}
+
 .ingredient-lines.own button {
   background: rgba(21, 57, 46, 0.13);
   color: var(--green);
+}
+
+.station-row,
+.technique-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.6rem 0;
+}
+
+.station-row button,
+.technique-grid button {
+  min-height: 2rem;
+  border: 1px solid rgba(83, 55, 34, 0.22);
+  border-radius: 999px;
+  background: rgba(255, 249, 232, 0.68);
+  color: var(--ink);
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.station-row button.active {
+  background: var(--green);
+  color: var(--paper-light);
+}
+
+.technique-grid button {
+  background: rgba(180, 107, 60, 0.16);
+  color: #62361f;
+}
+
+.action-log {
+  max-height: 7rem;
+  overflow: auto;
+  margin: 0.7rem 0;
+  padding-left: 1.2rem;
+  color: #3d2b1e;
+  line-height: 1.45;
 }
 
 .add-ingredient {
@@ -961,9 +1136,12 @@ button {
 }
 
 @media (max-width: 1100px) {
-  .kitchen-workbench {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
+  .reservation-book {
+    width: min(54rem, calc(100% - 1.5rem));
+  }
+
+  .client-ticket {
+    width: min(24rem, 44vw);
   }
 
   .reserve-shelf {
@@ -995,6 +1173,11 @@ button {
     left: 1rem;
   }
 
+  .scene-home-return {
+    left: 0.75rem;
+    top: 0.75rem;
+  }
+
   .hotspot {
     min-height: 2.75rem;
     padding: 0.35rem 0.8rem;
@@ -1004,8 +1187,7 @@ button {
     display: none;
   }
 
-  .reservation-note,
-  .client-docket,
+  .client-ticket,
   .reserve-shelf,
   .receipt,
   .evaluation-sheet,
@@ -1020,22 +1202,33 @@ button {
     overflow: auto;
   }
 
-  .reservation-note {
-    min-height: 0;
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      "label"
-      "name"
-      "copy"
-      "button";
-    padding: 1rem;
+  .reservation-book {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    min-height: 11rem;
+    max-height: 45vh;
+    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr);
+    column-gap: 1rem;
+    transform: none;
+    padding: 0.75rem;
+    overflow: hidden;
   }
 
-  .reservation-note::after {
-    display: none;
+  .reservation-page {
+    max-height: 38vh;
+    padding: 0.45rem;
   }
 
-  .reservation-note button {
+  .reservation-page p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .reservation-page button {
     justify-self: start;
   }
 
@@ -1046,10 +1239,29 @@ button {
     min-height: 3rem;
   }
 
-  .kitchen-workbench {
+  .phase-indicator {
+    left: 4.5rem;
+    right: 0.75rem;
+    top: 0.75rem;
+    max-width: none;
+    transform: none;
+  }
+
+  .phase-panel,
+  .commande-ticket,
+  .mise-panel,
+  .cuisson-panel,
+  .service-panel {
+    left: 0.75rem;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: auto;
+    max-height: 42vh;
+    transform: none;
+  }
+
+  .mise-columns {
     grid-template-columns: 1fr;
-    max-height: 56vh;
-    overflow: auto;
   }
 
   .book-overlay {

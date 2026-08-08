@@ -103,6 +103,7 @@ function Scene({
   active,
   hotspots,
   onNavigate,
+  showHomeReturn = true,
   showTitle = true,
   children,
 }: {
@@ -113,6 +114,7 @@ function Scene({
   active: boolean;
   hotspots?: Hotspot[];
   onNavigate: (section: SectionId) => void;
+  showHomeReturn?: boolean;
   showTitle?: boolean;
   children?: ReactNode;
 }) {
@@ -123,6 +125,11 @@ function Scene({
       <div className="scene-frame">
         <Image src={image} alt={alt} fill priority={title === "Salon"} unoptimized sizes="100vw" className="scene-image" />
         <div className="scene-vignette" />
+        {showHomeReturn ? (
+          <button className="scene-home-return" type="button" onClick={() => onNavigate("home")} aria-label="Volver al salon">
+            Salon
+          </button>
+        ) : null}
         {showTitle ? (
           <header className="room-title">
             <p>{subtitle}</p>
@@ -313,6 +320,7 @@ export function LeGrimoireApp() {
         active={activeSection === "home"}
         hotspots={salonHotspots}
         onNavigate={setActiveSection}
+        showHomeReturn={false}
         showTitle={false}
       >
         <button className="closed-grimoire" type="button" onClick={() => setActiveSection("grimoire")} aria-label="Abrir el libro de recetas">

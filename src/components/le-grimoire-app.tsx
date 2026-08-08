@@ -290,6 +290,7 @@ export function LeGrimoireApp() {
   }
 
   const salonHotspots: Hotspot[] = [
+    { id: "doors-cuisine", label: "Cuisine", tooltip: "Entrar sin comanda", x: 61, y: 28, target: "cuisine", variant: "quiet" },
     { id: "book-caisse", label: "La Caisse", tooltip: "Abrir recibo y saldo", x: 54, y: 73, target: "caisse", variant: "book" },
     { id: "book-lettres", label: "Les Lettres", tooltip: "Correspondencia privada", x: 61, y: 83, target: "lettres", variant: "book" },
   ];
@@ -298,6 +299,7 @@ export function LeGrimoireApp() {
     { id: "prep", label: "Mesa central", tooltip: "Continuar plato", x: 45, y: 63, variant: "object" },
     { id: "bell", label: "Pedido activo", tooltip: "Revisar comanda", x: 31, y: 39, variant: "quiet" },
     { id: "reserve-door", label: "Reserve", tooltip: "Ir a la despensa", x: 74, y: 33, target: "reserve", variant: "door" },
+    { id: "service-door", label: "Pause", tooltip: "Sortie de service", x: 17, y: 48, target: "lettres", variant: "quiet" },
     { id: "pass", label: "Pase", tooltip: "Servir cuando este listo", x: 80, y: 72, onClick: completeService, variant: "object" },
   ];
 

@@ -133,7 +133,7 @@ button {
 
 .hotspot {
   position: absolute;
-  z-index: 4;
+  z-index: 7;
   display: grid;
   min-width: 3rem;
   min-height: 2.35rem;
@@ -196,9 +196,16 @@ button {
 }
 
 .hotspot.quiet {
-  min-width: 2.4rem;
-  min-height: 2.1rem;
-  opacity: 0.9;
+  min-width: 2.25rem;
+  min-height: 1.95rem;
+  border-color: rgba(255, 242, 212, 0.34);
+  background: rgba(18, 12, 8, 0.34);
+  padding: 0.2rem 0.58rem;
+  opacity: 0.82;
+}
+
+.hotspot.quiet span {
+  font-size: 0.9rem;
 }
 
 .reservation-note,

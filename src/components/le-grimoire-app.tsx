@@ -715,6 +715,7 @@ export function LeGrimoireApp() {
   const [sharedItems, setSharedItems] = useSharedState<SharedKitchenItem[]>("le-grimoire:shared-items", initialSharedItems);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [objectTrayOpen, setObjectTrayOpen] = useState(false);
+  const [statusDockOpen, setStatusDockOpen] = useState(false);
   const [placingType, setPlacingType] = useState<PlacedItemType | null>(null);
   const [previewPoint, setPreviewPoint] = useState<ImagePoint | null>(null);
   const [draftPlacement, setDraftPlacement] = useState<(ImagePoint & { scene: SceneName; type: PlacedItemType }) | null>(null);
@@ -1506,33 +1507,72 @@ export function LeGrimoireApp() {
 
         {place === "cuisine" ? (
           <>
-            <aside className="service-board">
-              <div className="status-line chef-line">
-                <span>Le Chef</span>
-                <strong>{statusLine(chefStatuses, chefStatus)}</strong>
-              </div>
-              {isChef ? (
-                <div>
-                  {chefStatuses.map((status) => (
-                    <button key={status.id} type="button" className={chefStatus === status.id ? "active" : ""} onClick={() => setChefStatus(status.id)}>
-                      {status.label}
-                    </button>
-                  ))}
+            <aside className={statusDockOpen ? "status-dock open" : "status-dock"} aria-label="État du personnel">
+              <button
+                className={`status-pull ${isChef ? "chef-hat" : "apron"}`}
+                type="button"
+                onClick={() => setStatusDockOpen((current) => !current)}
+                aria-label={isChef ? "État du Chef" : "État de la Serveuse"}
+              >
+                <span aria-hidden="true">{isChef ? "👨‍🍳" : ""}</span>
+              </button>
+              {statusDockOpen ? (
+                <div className="status-paper">
+                  {isChef ? (
+                    <>
+                      <div className="status-line chef-line">
+                        <span>Le Chef</span>
+                        <strong>{statusLine(chefStatuses, chefStatus)}</strong>
+                      </div>
+                      <div className="status-options">
+                        {chefStatuses.map((status) => (
+                          <button
+                            key={status.id}
+                            type="button"
+                            className={chefStatus === status.id ? "active" : ""}
+                            onClick={() => {
+                              setChefStatus(status.id);
+                              setStatusDockOpen(false);
+                            }}
+                          >
+                            {status.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="status-line read-only">
+                        <span>Serveuse</span>
+                        <strong>{statusLine(serveuseStatuses, serveuseStatus)}</strong>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="status-line serveuse-line">
+                        <span>Serveuse</span>
+                        <strong>{statusLine(serveuseStatuses, serveuseStatus)}</strong>
+                      </div>
+                      <div className="status-options">
+                        {serveuseStatuses.map((status) => (
+                          <button
+                            key={status.id}
+                            type="button"
+                            className={serveuseStatus === status.id ? "active" : ""}
+                            onClick={() => {
+                              setServeuseStatus(status.id);
+                              setStatusDockOpen(false);
+                            }}
+                          >
+                            {status.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="status-line read-only">
+                        <span>Le Chef</span>
+                        <strong>{statusLine(chefStatuses, chefStatus)}</strong>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : null}
-              <div className="status-line serveuse-line">
-                <span>Serveuse</span>
-                <strong>{statusLine(serveuseStatuses, serveuseStatus)}</strong>
-              </div>
-              {isChef ? null : (
-                <div>
-                  {serveuseStatuses.map((status) => (
-                    <button key={status.id} type="button" className={serveuseStatus === status.id ? "active" : ""} onClick={() => setServeuseStatus(status.id)}>
-                      {status.label}
-                    </button>
-                  ))}
-                </div>
-              )}
             </aside>
           </>
         ) : null}

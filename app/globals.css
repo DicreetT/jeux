@@ -209,6 +209,7 @@ button:disabled {
 
 .role-pin,
 .return-cuisine,
+.status-dock,
 .service-board,
 .serveuse-tag,
 .passage-ticket,
@@ -236,6 +237,7 @@ button:disabled {
 
 .role-pin button,
 .return-cuisine,
+.status-dock button,
 .service-board button,
 .serveuse-tag button,
 .tiny-actions button,
@@ -286,6 +288,7 @@ button:disabled {
 }
 
 .role-pin button.active,
+.status-dock button.active,
 .service-board button.active,
 .serveuse-tag button.active,
 .caisse-tabs button.active {
@@ -369,6 +372,132 @@ button:disabled {
   .scene-hotspot span {
     display: none;
   }
+}
+
+.status-dock {
+  right: 0.35rem;
+  top: calc(50% + 4.6rem);
+  z-index: 9;
+  color: #f7dec0;
+}
+
+.status-pull {
+  display: grid;
+  width: 2.1rem;
+  min-height: 2.1rem;
+  place-items: center;
+  border: 1px solid rgba(255, 232, 181, 0.18);
+  border-radius: 999px 0 0 999px;
+  background: rgba(12, 8, 5, 0.5);
+  color: #f5dcae;
+  padding: 0;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(10px);
+}
+
+.status-pull span {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.status-pull.apron::before {
+  content: "";
+  width: 0.88rem;
+  height: 1.05rem;
+  border: 2px solid rgba(245, 220, 174, 0.86);
+  border-top: 0;
+  border-radius: 0 0 0.34rem 0.34rem;
+  background:
+    linear-gradient(90deg, transparent 0 34%, rgba(245, 220, 174, 0.76) 34% 45%, transparent 45% 55%, rgba(245, 220, 174, 0.76) 55% 66%, transparent 66% 100%),
+    rgba(255, 246, 223, 0.08);
+  box-shadow: inset 0 0.22rem 0 rgba(245, 220, 174, 0.78);
+}
+
+.status-dock.open {
+  right: 0.75rem;
+  top: auto;
+  bottom: 5.25rem;
+  width: min(13.8rem, calc(100vw - 1.5rem));
+}
+
+.status-dock.open .status-pull {
+  position: absolute;
+  right: 0.25rem;
+  top: 50%;
+  z-index: 2;
+  transform: translateY(-50%);
+}
+
+.status-paper {
+  display: grid;
+  gap: 0.42rem;
+  border: 1px solid rgba(255, 232, 181, 0.16);
+  border-radius: 7px;
+  background:
+    linear-gradient(180deg, rgba(17, 24, 19, 0.78), rgba(10, 13, 11, 0.72));
+  padding: 0.75rem 2.55rem 0.75rem 0.75rem;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(12px);
+}
+
+.status-line + .read-only {
+  margin-top: 0.2rem;
+  border-top: 1px solid rgba(255, 232, 181, 0.12);
+  padding-top: 0.42rem;
+}
+
+.status-line.read-only {
+  opacity: 0.78;
+}
+
+.status-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.32rem;
+}
+
+.status-dock span,
+.status-line span,
+.passage-ticket span,
+.caisse-drawer header span,
+.book-page span,
+.paper-modal span,
+.book-placeholder span {
+  display: block;
+  color: #8d2638;
+  font-size: 0.66rem;
+  font-weight: 950;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.status-pull span {
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.status-line span {
+  color: #d0ad61;
+}
+
+.status-line strong {
+  display: block;
+  margin: 0.12rem 0 0;
+  font-family: var(--font-display), Georgia, serif;
+  font-size: 0.96rem;
+  line-height: 1.05;
+}
+
+.status-dock button:not(.status-pull) {
+  min-height: 1.45rem;
+  border-color: rgba(255, 232, 181, 0.18);
+  background: rgba(255, 246, 223, 0.1);
+  color: #f7dec0;
+  padding: 0 0.38rem;
+  font-size: 0.63rem;
 }
 
 .service-board,
@@ -1705,6 +1834,27 @@ button:disabled {
   .passage-ticket {
     width: min(11rem, 26vw);
   }
+
+  .status-dock {
+    right: 0.3rem;
+    top: calc(50% + 4.2rem);
+  }
+
+  .status-dock.open {
+    right: 0.5rem;
+    bottom: 3.6rem;
+    width: min(12rem, 30vw);
+  }
+
+  .status-line strong {
+    font-size: 0.82rem;
+  }
+
+  .status-dock button:not(.status-pull) {
+    min-height: 1.28rem;
+    padding: 0 0.32rem;
+    font-size: 0.58rem;
+  }
 }
 
 @media (max-width: 760px) and (orientation: portrait) {
@@ -1816,6 +1966,19 @@ button:disabled {
     position: fixed;
     right: 0;
     z-index: 24;
+  }
+
+  .status-dock {
+    position: fixed;
+    right: 0;
+    top: calc(50% + 4.2rem);
+    z-index: 24;
+  }
+
+  .status-dock.open {
+    right: 0.5rem;
+    bottom: max(4rem, env(safe-area-inset-bottom));
+    width: min(12.5rem, calc(100vw - 1rem));
   }
 
   .action-drawer.open {

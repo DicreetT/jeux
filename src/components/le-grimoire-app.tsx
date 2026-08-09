@@ -798,6 +798,7 @@ export function LeGrimoireApp() {
   const [grimoireDraftOpen, setGrimoireDraftOpen] = useState(false);
   const [grimoireDraft, setGrimoireDraft] = useState<GrimoireDraft>(createEmptyGrimoireDraft());
   const [pourToiReply, setPourToiReply] = useState("");
+  const [touchedHotspotId, setTouchedHotspotId] = useState<string | null>(null);
 
   const isChef = role === "chef";
   const passageEvents = events.filter(
@@ -1462,13 +1463,24 @@ export function LeGrimoireApp() {
           <button
             key={hotspot.id}
             type="button"
-            className={`scene-hotspot ${hotspot.state ?? "quiet"}`}
+            className={`scene-hotspot ${hotspot.state ?? "quiet"} ${touchedHotspotId === hotspot.id ? "touched" : ""}`}
             style={{
               ...imagePointToCssPoint(hotspot, sceneSize),
               width: `${hotspot.widthPercent}%`,
               height: `${hotspot.heightPercent}%`,
             }}
-            onClick={hotspot.action}
+            onClick={(event) => {
+              if (window.matchMedia("(hover: none)").matches && touchedHotspotId !== hotspot.id) {
+                event.preventDefault();
+                setTouchedHotspotId(hotspot.id);
+                window.setTimeout(() => {
+                  setTouchedHotspotId((current) => (current === hotspot.id ? null : current));
+                }, 1800);
+                return;
+              }
+              setTouchedHotspotId(null);
+              hotspot.action();
+            }}
             aria-label={hotspot.label}
           >
             <span>{hotspot.label}</span>

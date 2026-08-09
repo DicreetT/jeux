@@ -1,0 +1,12 @@
+-- Run this manually in Supabase SQL Editor after the private auth migration.
+-- Replace the placeholder strings with the two private one-time codes.
+-- Do not commit a filled-in copy of this file.
+
+insert into public.private_role_invites (role, invite_hash)
+values
+  ('chef', crypt('CHEF_PRIVATE_CODE_HERE', gen_salt('bf'))),
+  ('serveuse', crypt('SERVEUSE_PRIVATE_CODE_HERE', gen_salt('bf')))
+on conflict (role) do update
+set invite_hash = excluded.invite_hash,
+    claimed_by = null,
+    claimed_at = null;

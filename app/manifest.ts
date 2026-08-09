@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Le Grimoire",
     short_name: "Grimoire",
-    description: "Restaurante privado para dos con recetas, cartas y cocina creativa.",
+    description: "Una cocina privada para dos personas con notas, recetas y presencia compartida.",
     start_url: "/",
     scope: "/",
     display: "standalone",

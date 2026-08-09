@@ -1,775 +1,2197 @@
 "use client";
 
 import Image from "next/image";
-import { ReactNode, useMemo, useState } from "react";
-import {
-  dishes as mockDishes,
-  ingredients,
-  letters,
-  progress as baseProgress,
-  recipes as mockRecipes,
-  restaurantItems,
-  tips as mockTips,
-  users,
-} from "@/src/data/mock-data";
-import {
-  calculateProgress,
-  generateMysteryBox,
-  generateReview,
-  getOrderForClient,
-  getTodaysClient,
-  makeDishFromDraft,
-} from "@/src/lib/game";
-import type { Dish, DishDraft, FlavorTag, Ingredient, Recipe, Review, Tip } from "@/src/types/domain";
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { loadSharedState, saveSharedState } from "@/src/lib/shared-state";
+import { isSupabaseConfigured, PRIVATE_MEDIA_BUCKET, supabase } from "@/src/lib/supabase";
+import type { Session } from "@supabase/supabase-js";
 
-type SectionId =
-  | "home"
-  | "comptoir"
-  | "cuisine"
-  | "grimoire"
-  | "reserve"
-  | "caisse"
-  | "lettres"
-  | "evaluation";
+type Place = "cuisine" | "grimoire" | "caisse" | "pause";
+type SceneName = "cuisine" | "pause";
+type UserRole = "chef" | "serveuse";
+type ProfileRole = "chef" | "serveuse";
+type ChefStatus = "en_cuisine" | "en_pause" | "hors_service";
+type ServeuseStatus = "absente" | "dans_les_parages" | "embeter_le_chef";
+type CaisseMode = "overview" | "tip" | "shop";
+type PlacedItemType =
+  | "note"
+  | "lettre"
+  | "bisou"
+  | "viande"
+  | "beurre"
+  | "cafe"
+  | "the"
+  | "patisserie"
+  | "fleur"
+  | "betise"
+  | "surveillance"
+  | "rappel"
+  | "petit_mot"
+  | "cigarette"
+  | "paquet_cigarettes"
+  | "chocolat";
 
-type Hotspot = {
+type SceneHotspot = {
   id: string;
   label: string;
-  tooltip: string;
   xPercent: number;
   yPercent: number;
-  widthPercent?: number;
-  heightPercent?: number;
-  target?: SectionId;
-  onClick?: () => void;
-  variant?: "book" | "door" | "object" | "quiet" | "exit";
+  widthPercent: number;
+  heightPercent: number;
+  action: () => void;
+  state?: "quiet" | "object" | "exit" | "secret";
 };
 
-type CuisinePhase = "commande" | "mise" | "cuisson" | "service";
-
-const roomLabels: Record<SectionId, string> = {
-  home: "Salon",
-  comptoir: "Le Comptoir",
-  cuisine: "Cuisine",
-  grimoire: "Le Grimoire",
-  reserve: "La Reserve",
-  caisse: "La Caisse",
-  lettres: "Les Lettres",
-  evaluation: "Evaluation",
-};
-
-const emptyDraft: DishDraft = {
-  name: "",
-  usedIngredients: "",
-  quantities: "",
-  technique: "",
-  preparation: "",
-  presentation: "",
-  chefNote: "",
-  serverNote: "",
-  story: "",
-  pairing: "",
-  saveAsRecipe: true,
-};
-
-const recipeFilters: Array<FlavorTag | "todos"> = [
-  "todos",
-  "dulce",
-  "salado",
-  "bebida",
-  "cocina marroqui",
-  "cocina francesa",
-  "experimental",
-  "favoritos",
-];
-
-const cuisinePhases: Array<{ id: CuisinePhase; label: string }> = [
-  { id: "commande", label: "Commande" },
-  { id: "mise", label: "Mise en place" },
-  { id: "cuisson", label: "Cuisson" },
-  { id: "service", label: "Service" },
-];
-
-const cookingStations = ["Table", "Sartén", "Olla", "Horno", "Mortero"];
-
-const cookingTechniques = ["couper", "émincer", "mariner", "saisir", "braiser", "confire", "rôtir", "émulsionner"];
-
-function userName(userId: string) {
-  return users.find((user) => user.id === userId)?.displayName ?? "La casa";
-}
-
-function Stars({ value }: { value: number }) {
-  return (
-    <span className="stars" aria-label={`${value} de 5 estrellas`}>
-      {Array.from({ length: 5 }, (_, index) => (
-        <span key={index} aria-hidden="true">
-          {index < value ? "★" : "☆"}
-        </span>
-      ))}
-    </span>
-  );
-}
-
-function Scene({
-  title,
-  subtitle,
-  image,
-  alt,
-  active,
-  hotspots,
-  onNavigate,
-  showHomeReturn = true,
-  showTitle = true,
-  children,
-}: {
+type KitchenEvent = {
+  id: string;
+  from: UserRole;
+  to?: UserRole;
   title: string;
-  subtitle?: string;
-  image: string;
-  alt: string;
-  active: boolean;
-  hotspots?: Hotspot[];
-  onNavigate: (section: SectionId) => void;
-  showHomeReturn?: boolean;
-  showTitle?: boolean;
-  children?: ReactNode;
-}) {
-  if (!active) return null;
+  message: string;
+  date: string;
+  mediaPath?: string;
+  mediaExpiresAt?: string;
+  mediaType?: string;
+};
 
-  return (
-    <section className="room-stage" aria-label={title}>
-      <div className="scene-frame">
-        <Image src={image} alt={alt} fill priority={title === "Salon"} unoptimized sizes="100vw" className="scene-image" />
-        <div className="scene-vignette" />
-        {showHomeReturn ? (
-          <button className="scene-home-return" type="button" onClick={() => onNavigate("home")} aria-label="Volver al salon">
-            Salon
-          </button>
-        ) : null}
-        {showTitle ? (
-          <header className="room-title">
-            <p>{subtitle}</p>
-            <h1>{title}</h1>
-          </header>
-        ) : null}
-        {hotspots?.map((hotspot) => (
-          <button
-            key={hotspot.id}
-            type="button"
-            className={`hotspot ${hotspot.variant ?? "object"}`}
-            style={{
-              left: `${hotspot.xPercent}%`,
-              top: `${hotspot.yPercent}%`,
-              width: hotspot.widthPercent ? `${hotspot.widthPercent}%` : undefined,
-              height: hotspot.heightPercent ? `${hotspot.heightPercent}%` : undefined,
-            }}
-            onClick={() => (hotspot.onClick ? hotspot.onClick() : hotspot.target ? onNavigate(hotspot.target) : undefined)}
-            aria-label={hotspot.tooltip}
-          >
-            <span>{hotspot.label}</span>
-            <small>{hotspot.tooltip}</small>
-          </button>
-        ))}
-        {children}
-      </div>
-    </section>
-  );
+type PrivateProfile = {
+  id: string;
+  role: ProfileRole;
+  display_name: string | null;
+};
+
+type ScenePlacedItem = {
+  id: string;
+  scene: SceneName;
+  xPercent: number;
+  yPercent: number;
+  type: PlacedItemType;
+  authorId: UserRole;
+  recipientId: UserRole;
+  message: string;
+  createdAt: string;
+  collectedAt?: string;
+};
+
+type Wallets = Record<UserRole, number>;
+
+type CaisseEntry = {
+  id: string;
+  from: UserRole;
+  to?: UserRole;
+  type: "tip" | "gift" | "shop";
+  amount: number;
+  item?: string;
+  message: string;
+  date: string;
+};
+
+type GrimoireSection = "index" | "chef" | "pour_toi";
+type PourToiKind = "envie" | "ferais";
+type PourToiStatus = "envoyé" | "en_cours" | "servi";
+type PourToiLiberty = "Totale" | "Quelques indications" | "Très précise";
+
+type GrimoireEntry = {
+  id: string;
+  section: Exclude<GrimoireSection, "index">;
+  kind: "recipe" | PourToiKind;
+  title: string;
+  from: UserRole;
+  to?: UserRole;
+  date: string;
+  ingredients: string;
+  quantities: string;
+  time: string;
+  temperatures: string;
+  preparation: string;
+  techniques: string;
+  notes: string;
+  next?: string;
+  status?: PourToiStatus;
+  envie?: string;
+  flavors?: string;
+  avoid?: string;
+  mood?: string;
+  liberty?: PourToiLiberty;
+  petitMot?: string;
+  dishIdea?: string;
+  description?: string;
+  whyYou?: string;
+  chefDecision?: string;
+  chefNote?: string;
+  reaction?: string;
+};
+
+type GrimoireDraft = Pick<
+  GrimoireEntry,
+  | "section"
+  | "kind"
+  | "title"
+  | "ingredients"
+  | "preparation"
+  | "notes"
+  | "envie"
+  | "flavors"
+  | "avoid"
+  | "mood"
+  | "liberty"
+  | "petitMot"
+  | "dishIdea"
+  | "description"
+  | "whyYou"
+>;
+
+type SharedKitchenItem = {
+  id: string;
+  name: string;
+  cost: number;
+  boughtBy: UserRole;
+  date: string;
+};
+
+type ImagePoint = {
+  xPercent: number;
+  yPercent: number;
+};
+
+type CssPoint = {
+  left: string;
+  top: string;
+};
+
+const IMAGE_WIDTH = 1672;
+const IMAGE_HEIGHT = 941;
+const IMAGE_ASPECT = IMAGE_WIDTH / IMAGE_HEIGHT;
+
+const roleLabels: Record<UserRole, string> = {
+  chef: "Chef",
+  serveuse: "Serveuse",
+};
+
+const chefStatuses: Array<{ id: ChefStatus; label: string; line: string }> = [
+  { id: "en_cuisine", label: "🔥 En cuisine", line: "🔥 En cuisine" },
+  { id: "en_pause", label: "🚬 En pause", line: "🚬 En pause" },
+  { id: "hors_service", label: "🌙 Hors service", line: "🌙 Hors service" },
+];
+
+const serveuseStatuses: Array<{ id: ServeuseStatus; label: string; line: string }> = [
+  { id: "absente", label: "🌙 Absente", line: "🌙 Absente" },
+  { id: "dans_les_parages", label: "👀 Dans les parages", line: "👀 Dans les parages" },
+  { id: "embeter_le_chef", label: "💋 Embêter le Chef", line: "💋 En train d’embêter le Chef" },
+];
+
+const chefResponses = [
+  { title: "🚪 Chasser la Serveuse", message: "Dehors de ma cuisine." },
+  { title: "🍰 Promettre un dessert", message: "Dessert promis. Conditions inconnues. Intentions sérieuses." },
+  { title: "🪙 Donner un pourboire", message: "Pourboire symbolique accordé. Service dangereux, mais charmant." },
+  { title: "💋 Répondre au bisou", message: "Le Chef répond au bisou. Productivité officiellement compromise." },
+];
+
+const cuisineItemTypes: Array<{ id: PlacedItemType; label: string; short: string }> = [
+  { id: "bisou", label: "💋 Bisou", short: "bisou" },
+  { id: "viande", label: "🥩 Viande", short: "viande" },
+  { id: "beurre", label: "🧈 Beurre", short: "beurre" },
+  { id: "cafe", label: "☕ Café", short: "café" },
+  { id: "the", label: "🍵 Thé", short: "thé" },
+  { id: "patisserie", label: "🍰 Pâtisserie", short: "pâtisserie" },
+  { id: "fleur", label: "🌹 Fleur", short: "fleur" },
+  { id: "surveillance", label: "👀 Je te surveille", short: "surveillance" },
+  { id: "rappel", label: "📌 Rappel", short: "rappel" },
+];
+
+const pauseItemTypes: Array<{ id: PlacedItemType; label: string; short: string }> = [
+  { id: "lettre", label: "💌 Lettre", short: "lettre" },
+  { id: "bisou", label: "💋 Bisou", short: "bisou" },
+  { id: "cigarette", label: "🚬 Cigarette", short: "cigarette" },
+  { id: "paquet_cigarettes", label: "🚬 Paquet de cigarettes", short: "paquet" },
+  { id: "cafe", label: "☕ Café", short: "café" },
+  { id: "the", label: "🍵 Thé", short: "thé" },
+  { id: "viande", label: "🥩 Viande", short: "viande" },
+  { id: "chocolat", label: "🍫 Chocolat", short: "chocolat" },
+  { id: "fleur", label: "🌹 Fleur", short: "fleur" },
+  { id: "petit_mot", label: "📌 Petit mot", short: "mot" },
+];
+
+const itemMeta: Record<PlacedItemType, { label: string; mark: string }> = {
+  note: { label: "Note", mark: "💌" },
+  lettre: { label: "Lettre", mark: "💌" },
+  bisou: { label: "Bisou", mark: "💋" },
+  viande: { label: "Viande", mark: "🥩" },
+  beurre: { label: "Beurre", mark: "🧈" },
+  cafe: { label: "Café", mark: "☕" },
+  the: { label: "Thé", mark: "🍵" },
+  patisserie: { label: "Pâtisserie", mark: "🍰" },
+  fleur: { label: "Fleur", mark: "🌹" },
+  betise: { label: "Bêtise", mark: "🔥" },
+  surveillance: { label: "Je te surveille", mark: "👀" },
+  rappel: { label: "Rappel", mark: "📌" },
+  petit_mot: { label: "Petit mot", mark: "📌" },
+  cigarette: { label: "Cigarette", mark: "🚬" },
+  paquet_cigarettes: { label: "Paquet de cigarettes", mark: "🚬" },
+  chocolat: { label: "Chocolat", mark: "🍫" },
+};
+
+const boutiqueItems = [
+  { id: "teapot", name: "Tetera", cost: 35 },
+  { id: "flowers", name: "Flores", cost: 18 },
+  { id: "lamp", name: "Lámpara", cost: 42 },
+  { id: "cup", name: "Nueva taza", cost: 16 },
+  { id: "rosemary", name: "Romero", cost: 14 },
+  { id: "bottle", name: "Botella especial", cost: 28 },
+  { id: "radio", name: "Radio antigua", cost: 55 },
+  { id: "plates", name: "Nueva vajilla", cost: 48 },
+  { id: "candle", name: "Vela", cost: 11 },
+  { id: "linen", name: "Mantel", cost: 24 },
+];
+
+const grimoireSections: Array<{ id: GrimoireSection; label: string; description: string }> = [
+  { id: "index", label: "Index", description: "La primera doble página del libro." },
+  { id: "chef", label: "Recettes du Chef", description: "Cuaderno profesional, temperaturas, tiempos y técnica." },
+  { id: "pour_toi", label: "Pour toi ❤️", description: "Lo que cocinaríamos el uno para el otro." },
+];
+
+const initialGrimoireEntries: GrimoireEntry[] = [
+  {
+    id: "recipe-aubergine",
+    section: "chef",
+    kind: "recipe",
+    title: "Aubergines rôties, chermoula douce",
+    from: "chef",
+    date: "2026-08-09T00:00:00.000Z",
+    ingredients: "Berenjena\nChermoula\nYogur si procede\nGranada\nHierbas frescas",
+    quantities: "2 berenjenas\n3 c. de chermoula\n1 puñado de granada",
+    time: "45 min",
+    temperatures: "Horno 210 °C",
+    preparation: "Asar las berenjenas abiertas hasta que la pulpa ceda. Lacar con chermoula al final para no quemar las especias. Terminar con hierbas y granada.",
+    techniques: "Asar\nLacar\nReposar",
+    notes: "Debe quedar profundo, no pesado. La salsa manda, pero no grita.",
+    next: "Probar con limón confitado picado muy fino.",
+  },
+  {
+    id: "recipe-grenade",
+    section: "chef",
+    kind: "recipe",
+    title: "Réduction grenade et poivre long",
+    from: "chef",
+    date: "2026-08-09T00:00:00.000Z",
+    ingredients: "Jus de grenade\nFond brun\nPoivre long\nVinaigre doux",
+    quantities: "250 ml jus\n120 ml fond\n1 pointe de vinaigre",
+    time: "25 min",
+    temperatures: "Frémissement doux",
+    preparation: "Réduire lentement le jus de grenade avec le fond. Monter la brillance hors feu. Corriger l'acidité juste avant service.",
+    techniques: "Réduire\nLier\nRectifier",
+    notes: "Va très bien avec cordero, pato o légumes rôtis.",
+    next: "Tester une version plus sèche pour dressage fin.",
+  },
+  {
+    id: "pour-toi-pistache",
+    section: "pour_toi",
+    kind: "envie",
+    title: "Pistache & chocolat noir",
+    from: "serveuse",
+    to: "chef",
+    date: "2026-08-09T00:00:00.000Z",
+    ingredients: "Pistache\nChocolat noir\nQuelque chose d'acide",
+    quantities: "À décider par Monsieur le Chef",
+    time: "Quand tu veux",
+    temperatures: "Pas brûler le chocolat, merci",
+    preparation: "Je veux quelque chose avec pistache et chocolat. Le reste est ton problème, Monsieur le Chef.",
+    techniques: "",
+    notes: "Surprends-moi. Mais si c’est moche, je juge.",
+    next: "",
+    status: "envoyé",
+    envie: "Quelque chose de chaud.",
+    flavors: "Pistache + chocolat noir + quelque chose d’acide",
+    avoid: "Quelque chose de trop sucré",
+    mood: "Après service, fatiguée mais dangereuse",
+    liberty: "Totale",
+    petitMot: "Surprends-moi. Mais si c’est moche, je juge.",
+  },
+  {
+    id: "ferais-entrecote",
+    section: "pour_toi",
+    kind: "ferais",
+    title: "Entrecôte après service",
+    from: "chef",
+    to: "serveuse",
+    date: "2026-08-09T00:00:00.000Z",
+    ingredients: "Entrecôte\nPommes dauphines\nJus au poivre",
+    quantities: "Deux tasses",
+    time: "Après fermeture",
+    temperatures: "Chaud, mais pas pressé",
+    preparation: "Entrecôte, pommes dauphines, jus au poivre.",
+    techniques: "",
+    notes: "Parce que tu dis que tu n’as pas faim et ensuite tu manges la moitié de mon assiette.",
+    status: "envoyé",
+    dishIdea: "Entrecôte, pommes dauphines, jus au poivre.",
+    description: "Simple, chaud, précis. Un vrai plat de fin de journée.",
+    whyYou: "Parce que tu dis que tu n’as pas faim et ensuite tu manges la moitié de mon assiette.",
+    petitMot: "Je ferais semblant de ne pas voir.",
+  },
+];
+
+const initialEvents: KitchenEvent[] = [
+  {
+    id: "event-welcome",
+    from: "serveuse",
+    title: "Rien à signaler.",
+    message: "La cuisine attend tranquillement son prochain désordre.",
+    date: "2026-08-09T00:00:00.000Z",
+  },
+];
+
+const initialPlacedItems: ScenePlacedItem[] = [
+  {
+    id: "item-cup-bisou",
+    scene: "cuisine",
+    xPercent: 78,
+    yPercent: 70,
+    type: "bisou",
+    authorId: "serveuse",
+    recipientId: "chef",
+    message: "Sur ta tasse. À réclamer après le service.",
+    createdAt: "2026-08-09T00:00:00.000Z",
+  },
+];
+
+const initialWallets: Wallets = { chef: 120, serveuse: 120 };
+const initialEntries: CaisseEntry[] = [];
+const initialSharedItems: SharedKitchenItem[] = [];
+const initialSeenEvents: string[] = [];
+
+function createEmptyGrimoireDraft(section: Exclude<GrimoireSection, "index"> = "chef"): GrimoireDraft {
+  return {
+    section,
+    kind: section === "pour_toi" ? "envie" : "recipe",
+    title: "",
+    ingredients: "",
+    preparation: "",
+    notes: "",
+    envie: "",
+    flavors: "",
+    avoid: "",
+    mood: "",
+    liberty: "Totale",
+    petitMot: "",
+    dishIdea: "",
+    description: "",
+    whyYou: "",
+  };
 }
 
-function Field({
-  label,
-  value,
-  onChange,
-  placeholder,
-  multiline = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  multiline?: boolean;
-}) {
-  return (
-    <label className="field">
-      <span>{label}</span>
-      {multiline ? (
-        <textarea value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
-      ) : (
-        <input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
-      )}
-    </label>
-  );
+function readStored<T>(key: string, fallback: T): T {
+  if (typeof window === "undefined") return fallback;
+  const raw = window.localStorage.getItem(key);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
 }
 
-export function LeGrimoireApp() {
-  const [activeSection, setActiveSection] = useState<SectionId>("home");
-  const clientIndex = 1;
-  const [creatorId, setCreatorId] = useState("chef");
-  const [cuisinePhase, setCuisinePhase] = useState<CuisinePhase>("commande");
-  const [selectedCookIngredient, setSelectedCookIngredient] = useState("");
-  const [selectedStation, setSelectedStation] = useState("Olla");
-  const [cookingActions, setCookingActions] = useState<string[]>([]);
-  const [ownIngredient, setOwnIngredient] = useState("");
-  const [ownIngredients, setOwnIngredients] = useState<string[]>(["Yogur salado", "Tomillo"]);
-  const [draft, setDraft] = useState<DishDraft>({
-    ...emptyDraft,
-    name: "Agneau citron, legumes rotis",
-    technique: "saisir, rotir, terminer avec une sauce courte",
-    preparation:
-      "Sellar la carne, asar los vegetales y montar una salsa con limon confitado. Ajustar sal y acidez al final.",
-    presentation: "Plato blanco, salsa en el fondo, guarnicion a un lado y hierbas frescas al pase.",
-    chefNote: "Controlar el picante. El cliente pidio citrico, no fuego.",
-    serverNote: "Recomendar agua con menta o vino blanco seco.",
-    story: "Plato de servicio: claro, caliente y bien equilibrado.",
-    pairing: "Vino blanco seco o te verde con menta",
-  });
-  const [savedDishes, setSavedDishes] = useState<Dish[]>(mockDishes);
-  const [savedRecipes, setSavedRecipes] = useState<Recipe[]>(mockRecipes);
-  const [tips, setTips] = useState<Tip[]>(mockTips);
-  const [lastReview, setLastReview] = useState<Review | null>(null);
-  const [recipeFilter, setRecipeFilter] = useState<FlavorTag | "todos">("todos");
-  const [selectedIngredient, setSelectedIngredient] = useState<Ingredient>(ingredients[0]);
-  const [bookIndex, setBookIndex] = useState(0);
+function useSharedState<T>(key: string, fallback: T) {
+  const [value, setValue] = useState<T>(fallback);
+  const [ready, setReady] = useState(false);
 
-  const activeClient = getTodaysClient(clientIndex);
-  const activeOrder = getOrderForClient(activeClient.id);
-  const mysteryBox = generateMysteryBox(activeClient.id);
-  const challengeIngredients = [
-    mysteryBox.principal.name,
-    mysteryBox.spice.name,
-    mysteryBox.fruit.name,
-    mysteryBox.vegetable.name,
-    mysteryBox.unexpected.name,
-  ];
-  const balance = tips.reduce((sum, tip) => sum + tip.amount, 0);
-  const unlockedItems = restaurantItems.filter((item) => item.unlocked).length;
-  const progress = calculateProgress(baseProgress, savedDishes.length, savedRecipes.length);
-  const activeRecipe = savedRecipes[bookIndex % savedRecipes.length];
+  useEffect(() => {
+    let cancelled = false;
 
-  const filteredRecipes = useMemo(() => {
-    if (recipeFilter === "todos") return savedRecipes;
-    if (recipeFilter === "favoritos") return savedRecipes.filter((recipe) => recipe.favorite);
-    return savedRecipes.filter((recipe) => recipe.tags.includes(recipeFilter));
-  }, [recipeFilter, savedRecipes]);
+    void (async () => {
+      const localValue = readStored(key, fallback);
+      const remoteValue = await loadSharedState<T>(key);
+      if (cancelled) return;
 
-  const serviceDraft = useMemo<DishDraft>(() => {
-    const technique = cookingActions.length > 0 ? cookingActions.join(", ") : "mise en place simple, cuisson a definir";
-    const preparation =
-      cookingActions.length > 0
-        ? cookingActions.map((action, index) => `${index + 1}. ${action}.`).join(" ")
-        : "Mise en place realisee, cuisson a confirmer avant le service.";
+      const nextValue = remoteValue ?? localValue;
+      setValue(nextValue);
+      window.localStorage.setItem(key, JSON.stringify(nextValue));
+      setReady(true);
+    })();
 
-    return {
-      ...draft,
-      technique,
-      preparation,
-      presentation: "Dressage sobre au passe.",
-      story: "",
+    return () => {
+      cancelled = true;
     };
-  }, [cookingActions, draft]);
+  }, [fallback, key]);
 
-  function updateDraft<K extends keyof DishDraft>(key: K, value: DishDraft[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
+  useEffect(() => {
+    if (!ready) return;
+    window.localStorage.setItem(key, JSON.stringify(value));
+    void saveSharedState(key, value);
+  }, [key, ready, value]);
 
-  function addOwnIngredient() {
-    const next = ownIngredient.trim();
-    if (!next || ownIngredients.includes(next)) return;
-    setOwnIngredients((current) => [...current, next]);
-    setOwnIngredient("");
-  }
+  return [value, setValue] as const;
+}
 
-  function addCookingAction(technique: string) {
-    const ingredient = selectedCookIngredient || challengeIngredients[0];
-    const action = `${technique} ${ingredient.toLowerCase()} (${selectedStation.toLowerCase()})`;
-    setCookingActions((current) => [...current, action]);
-  }
+function statusLine<T extends string>(items: Array<{ id: T; line: string }>, active: T) {
+  return items.find((item) => item.id === active)?.line ?? "";
+}
 
-  function completeService() {
-    const dish = makeDishFromDraft({
-      draft: serviceDraft,
-      client: activeClient,
-      order: activeOrder,
-      boxIngredients: challengeIngredients,
-      ownIngredients,
-      creatorId,
+function otherRole(role: UserRole): UserRole {
+  return role === "chef" ? "serveuse" : "chef";
+}
+
+function profileRoleToUserRole(role: ProfileRole): UserRole {
+  return role === "chef" ? "chef" : "serveuse";
+}
+
+function userRoleToProfileRole(role: UserRole): ProfileRole {
+  return role === "chef" ? "chef" : "serveuse";
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function expirationFromDuration(hours: number) {
+  return new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+}
+
+function isFutureDate(date?: string) {
+  return !date || Date.parse(date) > Date.now();
+}
+
+function safeStorageName(fileName: string) {
+  return fileName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toLowerCase();
+}
+
+async function stripImageMetadata(file: File): Promise<Blob> {
+  const url = URL.createObjectURL(file);
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new window.Image();
+      img.onload = () => resolve(img);
+      img.onerror = reject;
+      img.src = url;
     });
-    const review = generateReview(activeClient, dish, serviceDraft);
-    const completedDish = { ...dish, rating: review.stars, tipAmount: review.tipAmount };
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return file;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
 
-    setSavedDishes((current) => [completedDish, ...current]);
-    setLastReview(review);
-    setTips((current) => [
-      {
-        id: `tip-${dish.id}`,
-        from: activeClient.name,
-        source: "cliente",
-        amount: review.tipAmount,
-        stars: review.stars,
-        note: review.comment,
-        date: dish.date,
-      },
-      ...current,
-    ]);
-    setActiveSection("evaluation");
-
-    if (draft.saveAsRecipe) {
-      setSavedRecipes((current) => [
-        {
-          id: `rec-${dish.id}`,
-          name: dish.name,
-          authorId: creatorId,
-          date: dish.date,
-          ingredients: [...challengeIngredients, ...ownIngredients],
-          quantities: serviceDraft.quantities || "cantidades pendientes de afinar",
-          steps: cookingActions.length > 0 ? cookingActions : [serviceDraft.preparation],
-          difficulty: activeClient.demandLevel >= 4 ? "ritual" : "media",
-          time: "por medir",
-          notes: [serviceDraft.chefNote, serviceDraft.serverNote].filter(Boolean).join(" / "),
-          nextChange: "Anotar tiempo real y ajustar emplatado.",
-          story: serviceDraft.story,
-          origin: "Le Comptoir",
-          tags: ["experimental", activeOrder.prompt.includes("postre") ? "dulce" : "salado"],
-          favorite: false,
-          type: "plato del restaurante",
-        },
-        ...current,
-      ]);
-    }
+    return await new Promise<Blob>((resolve) => {
+      canvas.toBlob((blob) => resolve(blob ?? file), "image/webp", 0.86);
+    });
+  } finally {
+    URL.revokeObjectURL(url);
   }
+}
 
-  const salonHotspots: Hotspot[] = [
-    { id: "doors-cuisine", label: "Cuisine", tooltip: "Entrar sin comanda", xPercent: 61, yPercent: 28, widthPercent: 9, heightPercent: 7, target: "cuisine", variant: "quiet" },
-    { id: "book-caisse", label: "La Caisse", tooltip: "Abrir recibo y saldo", xPercent: 54, yPercent: 73, widthPercent: 9, heightPercent: 6, target: "caisse", variant: "book" },
-    { id: "book-lettres", label: "Les Lettres", tooltip: "Correspondencia privada", xPercent: 61, yPercent: 83, widthPercent: 9, heightPercent: 6, target: "lettres", variant: "book" },
-  ];
-
-  const cuisineHotspots: Hotspot[] = [
-    { id: "prep", label: "Mise", tooltip: "Mesa de mise en place", xPercent: 45, yPercent: 62, widthPercent: 15, heightPercent: 9, onClick: () => setCuisinePhase("mise"), variant: "object" },
-    { id: "bell", label: "Commande", tooltip: "Revisar comanda", xPercent: 31, yPercent: 39, widthPercent: 10, heightPercent: 6, onClick: () => setCuisinePhase("commande"), variant: "quiet" },
-    { id: "reserve-door", label: "La Réserve", tooltip: "Ir a la despensa", xPercent: 74, yPercent: 33, widthPercent: 12, heightPercent: 12, target: "reserve", variant: "door" },
-    { id: "service-door", label: "EXIT", tooltip: "Sortie de service", xPercent: 17, yPercent: 48, widthPercent: 9, heightPercent: 8, target: "lettres", variant: "exit" },
-    { id: "pass", label: "Pase", tooltip: "Servir cuando este listo", xPercent: 80, yPercent: 72, widthPercent: 12, heightPercent: 8, onClick: () => setCuisinePhase("service"), variant: "object" },
-  ];
-
+function PrivateDoor(props: {
+  state: "loading" | "login" | "claim";
+  mode: "signin" | "signup";
+  email: string;
+  password: string;
+  displayName: string;
+  claimRole: ProfileRole;
+  claimCode: string;
+  error: string;
+  busy: boolean;
+  onModeChange: (mode: "signin" | "signup") => void;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
+  onDisplayNameChange: (value: string) => void;
+  onClaimRoleChange: (value: ProfileRole) => void;
+  onClaimCodeChange: (value: string) => void;
+  onSubmitAuth: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmitClaim: (event: FormEvent<HTMLFormElement>) => void;
+  onSignOut?: () => void;
+}) {
   return (
-    <main className="restaurant-world">
-      <Scene
-        title="Le Grimoire"
-        subtitle="restaurant prive pour deux"
-        image="/scenes/salon/salon.png"
-        alt="Salon elegante de restaurante con libro de reservas y puertas de cocina al fondo"
-        active={activeSection === "home"}
-        hotspots={salonHotspots}
-        onNavigate={setActiveSection}
-        showHomeReturn={false}
-        showTitle={false}
-      >
-        <button className="closed-grimoire" type="button" onClick={() => setActiveSection("grimoire")} aria-label="Abrir el libro de recetas">
-          <span>Le Grimoire</span>
-        </button>
-        <aside className="reservation-book">
-          <section className="reservation-page left">
-            <span>Livre de réservations</span>
-            <strong>{activeClient.name}</strong>
-            <dl>
-              <div>
-                <dt>Table</dt>
-                <dd>3</dd>
-              </div>
-              <div>
-                <dt>Heure</dt>
-                <dd>21:00</dd>
-              </div>
-            </dl>
-            <small className="reservation-seal">Service privé</small>
-          </section>
-          <section className="reservation-page right">
-            <span>Commande</span>
-            <p>{activeOrder.prompt}</p>
-            <small>{activeOrder.constraints.slice(0, 3).join(" · ")}</small>
-            <div className="reservation-difficulty">
-              <b>Difficulté</b>
-              <Stars value={activeClient.demandLevel} />
-            </div>
-            <button type="button" onClick={() => setActiveSection("comptoir")}>
-              Voir la commande
-            </button>
-          </section>
-        </aside>
-      </Scene>
-
-      <Scene
-        title="Le Comptoir"
-        subtitle="un cliente, una comanda"
-        image="/scenes/comptoir/comptoir.png"
-        alt="Comptoir de restaurante con un cliente esperando su pedido"
-        active={activeSection === "comptoir"}
-        onNavigate={setActiveSection}
-      >
-        <aside className="client-ticket">
-          <span>Client</span>
-          <h2>{activeClient.name}</h2>
-          <dl>
-            <div>
-              <dt>Commande</dt>
-              <dd>{activeOrder.prompt}</dd>
-            </div>
-            <div>
-              <dt>Contraintes</dt>
-              <dd>{activeOrder.constraints.join(", ")}</dd>
-            </div>
-            <div>
-              <dt>À éviter</dt>
-              <dd>{activeClient.hatedIngredients.join(", ")}</dd>
-            </div>
-            <div>
-              <dt>Difficulté</dt>
-              <dd><Stars value={activeClient.demandLevel} /></dd>
-            </div>
-          </dl>
-          <button className="scene-action" type="button" onClick={() => setActiveSection("cuisine")}>
-            Accepter la commande
-          </button>
-        </aside>
-      </Scene>
-
-      <Scene
-        title="La Cuisine"
-        subtitle="reto culinario en servicio"
-        image="/scenes/cuisine/cuisine.png"
-        alt="Cocina profesional con cobre, especias, fuego y mesa de preparacion"
-        active={activeSection === "cuisine"}
-        hotspots={cuisineHotspots}
-        onNavigate={setActiveSection}
-      >
-        <div className="phase-indicator" aria-label="Fases de cocina">
-          {cuisinePhases.map((phase, index) => (
-            <button key={phase.id} type="button" className={cuisinePhase === phase.id ? "active" : ""} onClick={() => setCuisinePhase(phase.id)}>
-              <span>{index + 1}</span>
-              {phase.label}
-            </button>
-          ))}
-        </div>
-
-        {cuisinePhase === "commande" ? (
-          <section className="phase-panel commande-ticket">
-            <span>Commande</span>
-            <strong>{activeClient.name}</strong>
-            <p>{activeOrder.prompt}</p>
-            <small>{activeOrder.constraints.join(" · ")}</small>
-            <div className="ingredient-lines">
-              {challengeIngredients.slice(0, 4).map((ingredient) => (
-                <span key={ingredient}>{ingredient}</span>
-              ))}
-            </div>
-            <button className="scene-action" type="button" onClick={() => setCuisinePhase("mise")}>
-              Commencer la mise en place
-            </button>
-          </section>
-        ) : null}
-
-        {cuisinePhase === "mise" ? (
-          <section className="phase-panel mise-panel">
-            <span>Mise en place</span>
-            <h2>Table centrale</h2>
-            <div className="mise-columns">
-              <div>
-                <h3>Ingrédients imposés</h3>
-                <div className="ingredient-lines">
-                  {challengeIngredients.map((ingredient) => (
-                    <button key={ingredient} type="button" onClick={() => setSelectedCookIngredient(ingredient)}>
-                      {ingredient}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h3>Ajouts du Chef</h3>
-                <div className="add-ingredient">
-                  <input value={ownIngredient} onChange={(event) => setOwnIngredient(event.target.value)} placeholder="ajouter" aria-label="Ingrediente añadido" />
-                  <button type="button" onClick={addOwnIngredient}>+</button>
-                </div>
-                <div className="ingredient-lines own">
-                  {ownIngredients.map((ingredient) => (
-                    <button key={ingredient} type="button" onClick={() => setSelectedCookIngredient(ingredient)}>
-                      {ingredient}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <button className="scene-action" type="button" onClick={() => setCuisinePhase("cuisson")}>
-              Passer en cuisson
-            </button>
-          </section>
-        ) : null}
-
-        {cuisinePhase === "cuisson" ? (
-          <section className="phase-panel cuisson-panel">
-            <span>Cuisson</span>
-            <h2>{selectedCookIngredient || challengeIngredients[0]}</h2>
-            <div className="station-row">
-              {cookingStations.map((station) => (
-                <button key={station} type="button" className={selectedStation === station ? "active" : ""} onClick={() => setSelectedStation(station)}>
-                  {station}
-                </button>
-              ))}
-            </div>
-            <div className="technique-grid">
-              {cookingTechniques.map((technique) => (
-                <button key={technique} type="button" onClick={() => addCookingAction(technique)}>
-                  {technique}
-                </button>
-              ))}
-            </div>
-            <ol className="action-log">
-              {cookingActions.length > 0 ? cookingActions.map((action) => <li key={action}>{action}</li>) : <li>Choisir un ingrédient puis une technique.</li>}
-            </ol>
-            <button className="scene-action" type="button" onClick={() => setCuisinePhase("service")}>
-              Aller au passe
-            </button>
-          </section>
-        ) : null}
-
-        {cuisinePhase === "service" ? (
-          <section className="phase-panel service-panel">
-            <span>Service</span>
-            <Field label="Nom du plat" value={draft.name} onChange={(value) => updateDraft("name", value)} />
-            <div className="form-row">
-              <Field label="Note du Chef" value={draft.chefNote} onChange={(value) => updateDraft("chefNote", value)} multiline />
-              <Field label="Note de la Mesera" value={draft.serverNote} onChange={(value) => updateDraft("serverNote", value)} multiline />
-            </div>
-            <Field label="Maridage" value={draft.pairing} onChange={(value) => updateDraft("pairing", value)} />
-            <label className="field">
-              <span>Créateur principal</span>
-              <select value={creatorId} onChange={(event) => setCreatorId(event.target.value)}>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="check-row">
-              <input type="checkbox" checked={draft.saveAsRecipe} onChange={(event) => updateDraft("saveAsRecipe", event.target.checked)} />
-              Garder dans Le Grimoire
-            </label>
-            <button className="scene-action" type="button" onClick={completeService}>
-              Servir le plat
-            </button>
-          </section>
-        ) : null}
-      </Scene>
-
-      <Scene
-        title="Evaluation"
-        subtitle="le client goute le plat"
-        image="/scenes/salon/salon.png"
-        alt="Salon del restaurante durante la evaluacion del plato"
-        active={activeSection === "evaluation"}
-        onNavigate={setActiveSection}
-      >
-        <aside className="evaluation-sheet">
-          <span>Evaluation</span>
-          {lastReview ? (
+    <main className="private-kitchen">
+      <section className="staff-door" aria-label="Entrée privée">
+        <div className="staff-door-card">
+          <span>Réservé au personnel</span>
+          <h1>Notre Restaurant</h1>
+          {props.state === "loading" ? <p>On cherche la clé sous le paillasson...</p> : null}
+          {props.state === "login" ? (
             <>
-              <h2>{draft.name}</h2>
-              <Stars value={lastReview.stars} />
-              <p>{lastReview.comment}</p>
-              {lastReview.complaint ? <small>{lastReview.complaint}</small> : <small>Commande respetada sin queja formal.</small>}
-              <dl>
-                <div>
-                  <dt>Respect de la commande</dt>
-                  <dd>{lastReview.stars >= 4 ? "bien" : "a revisar"}</dd>
-                </div>
-                <div>
-                  <dt>Propina</dt>
-                  <dd>{lastReview.tipAmount} monedas</dd>
-                </div>
-              </dl>
-              <button className="scene-action" type="button" onClick={() => setActiveSection("home")}>
-                Volver al salon
-              </button>
+              <div className="auth-switch" aria-label="Mode d’accès">
+                <button type="button" className={props.mode === "signin" ? "active" : ""} onClick={() => props.onModeChange("signin")}>
+                  Entrer
+                </button>
+                <button type="button" className={props.mode === "signup" ? "active" : ""} onClick={() => props.onModeChange("signup")}>
+                  Créer ma clé
+                </button>
+              </div>
+              <form className="staff-form" onSubmit={props.onSubmitAuth}>
+                <label>
+                  Email
+                  <input type="email" value={props.email} onChange={(event) => props.onEmailChange(event.target.value)} required />
+                </label>
+                <label>
+                  Mot de passe
+                  <input type="password" value={props.password} onChange={(event) => props.onPasswordChange(event.target.value)} required minLength={6} />
+                </label>
+                <button type="submit" disabled={props.busy}>
+                  {props.busy ? "..." : props.mode === "signin" ? "Entrer" : "Créer"}
+                </button>
+              </form>
             </>
-          ) : (
-            <p>Primero hay que servir un plato.</p>
-          )}
-        </aside>
-      </Scene>
-
-      <Scene
-        title="La Reserve"
-        subtitle="despensa del restaurante"
-        image="/scenes/reserve/reserve.png"
-        alt="Despensa antigua con estanterias, frascos, especias y ceramica"
-        active={activeSection === "reserve"}
-        onNavigate={setActiveSection}
-        hotspots={[
-          { id: "back-kitchen", label: "Cuisine", tooltip: "Volver a cocina", xPercent: 51, yPercent: 43, widthPercent: 12, heightPercent: 10, target: "cuisine", variant: "door" },
-        ]}
-      >
-        <div className="reserve-shelf">
-          <div className="shelf-items" aria-label="Ingredientes de La Reserve">
-            {ingredients.slice(0, 12).map((ingredient) => (
-              <button
-                key={ingredient.id}
-                type="button"
-                className={selectedIngredient.id === ingredient.id ? "jar active" : "jar"}
-                onClick={() => setSelectedIngredient(ingredient)}
-              >
-                <span>{ingredient.icon}</span>
-                {ingredient.name}
-              </button>
-            ))}
-          </div>
-          <aside className="ingredient-file">
-            <span>{selectedIngredient.category}</span>
-            <h2>{selectedIngredient.name}</h2>
-            <p>{selectedIngredient.description}</p>
-            <dl>
-              <div>
-                <dt>Origen</dt>
-                <dd>{selectedIngredient.origin}</dd>
-              </div>
-              <div>
-                <dt>Rareza</dt>
-                <dd>{selectedIngredient.rarity}</dd>
-              </div>
-              <div>
-                <dt>Estado</dt>
-                <dd>{selectedIngredient.unlocked ? "desbloqueado" : "bloqueado"}</dd>
-              </div>
-            </dl>
-            <small>{selectedIngredient.notes}</small>
-          </aside>
+          ) : null}
+          {props.state === "claim" ? (
+            <>
+              <p>Compte reconnu. Maintenant choisis la seule clé qui t’appartient.</p>
+              <form className="staff-form" onSubmit={props.onSubmitClaim}>
+                <label>
+                  Nom affiché
+                  <input value={props.displayName} onChange={(event) => props.onDisplayNameChange(event.target.value)} placeholder="Chef, Serveuse..." />
+                </label>
+                <label>
+                  Rôle
+                  <select value={props.claimRole} onChange={(event) => props.onClaimRoleChange(event.target.value as ProfileRole)}>
+                    <option value="chef">Chef</option>
+                    <option value="serveuse">Serveuse</option>
+                  </select>
+                </label>
+                <label>
+                  Code privé
+                  <input value={props.claimCode} onChange={(event) => props.onClaimCodeChange(event.target.value)} required />
+                </label>
+                <button type="submit" disabled={props.busy}>
+                  {props.busy ? "..." : "Réclamer ma place"}
+                </button>
+              </form>
+              {props.onSignOut ? (
+                <button className="door-quiet-button" type="button" onClick={props.onSignOut}>
+                  Changer de compte
+                </button>
+              ) : null}
+            </>
+          ) : null}
+          {props.error ? <p className="staff-error">{props.error}</p> : null}
         </div>
-      </Scene>
-
-      <Scene
-        title="Le Grimoire"
-        subtitle="libro abierto"
-        image="/scenes/grimoire/grimoire.png"
-        alt="Grimorio culinario abierto sobre una mesa"
-        active={activeSection === "grimoire"}
-        onNavigate={setActiveSection}
-        hotspots={[
-          { id: "prev-page", label: "‹", tooltip: "Pagina anterior", xPercent: 24, yPercent: 87, widthPercent: 6, heightPercent: 6, onClick: () => setBookIndex((index) => Math.max(0, index - 1)), variant: "quiet" },
-          { id: "next-page", label: "›", tooltip: "Pagina siguiente", xPercent: 76, yPercent: 87, widthPercent: 6, heightPercent: 6, onClick: () => setBookIndex((index) => index + 1), variant: "quiet" },
-        ]}
-      >
-        <div className="book-overlay">
-          <section className="book-page left">
-            <span>{activeRecipe.type}</span>
-            <h2>{activeRecipe.name}</h2>
-            <p>Autor: {userName(activeRecipe.authorId)} · {activeRecipe.time}</p>
-            <h3>Ingredientes</h3>
-            <ul>
-              {activeRecipe.ingredients.map((ingredient) => (
-                <li key={ingredient}>{ingredient}</li>
-              ))}
-            </ul>
-          </section>
-          <section className="book-page right">
-            <h3>Preparacion</h3>
-            <ol>
-              {activeRecipe.steps.map((step) => (
-                <li key={step}>{step}</li>
-              ))}
-            </ol>
-            <h3>Notas</h3>
-            <p>{activeRecipe.notes}</p>
-            <small>Proxima vez: {activeRecipe.nextChange}</small>
-          </section>
-        </div>
-        <div className="bookmark-strip">
-          {recipeFilters.map((filter) => (
-            <button key={filter} type="button" className={recipeFilter === filter ? "active" : ""} onClick={() => setRecipeFilter(filter)}>
-              {filter}
-            </button>
-          ))}
-        </div>
-        <div className="index-drawer">
-          {filteredRecipes.slice(0, 4).map((recipe, index) => (
-            <button key={recipe.id} type="button" onClick={() => setBookIndex(index)}>
-              {recipe.name}
-            </button>
-          ))}
-        </div>
-      </Scene>
-
-      <Scene
-        title="La Caisse"
-        subtitle="registro y propinas"
-        image="/scenes/caisse/caisse.png"
-        alt="Caja registradora antigua abierta con monedas, joyas y recibo"
-        active={activeSection === "caisse"}
-        onNavigate={setActiveSection}
-      >
-        <aside className="receipt">
-          <span>Saldo</span>
-          <strong>{balance} monedas</strong>
-          <p>{unlockedItems} objetos instalados</p>
-          {tips.slice(0, 5).map((tip) => (
-            <div className="receipt-row" key={tip.id}>
-              <b>+{tip.amount}</b>
-              <span>{tip.note}</span>
-            </div>
-          ))}
-        </aside>
-        <div className="purchase-tabs">
-          {restaurantItems.slice(0, 6).map((item) => (
-            <button key={item.id} type="button">
-              {item.name}
-              <span>{item.cost}</span>
-            </button>
-          ))}
-        </div>
-      </Scene>
-
-      {activeSection === "lettres" ? (
-        <section className="paper-room letters-room">
-          <RoomToolbar active={activeSection} onNavigate={setActiveSection} />
-          <h1>Les Lettres</h1>
-          <p>Bandeja privada de notas, retos y recetas dedicadas.</p>
-          <div className="letter-board">
-            {letters.map((letter) => (
-              <article className="folded-letter" key={letter.id}>
-                <span>{letter.type}</span>
-                <h2>{letter.title}</h2>
-                <p>{letter.body}</p>
-                <small>
-                  De {userName(letter.fromUserId)} para {userName(letter.toUserId)}
-                </small>
-              </article>
-            ))}
-            <aside className="write-letter">
-              <h2>Nueva nota</h2>
-              <p>Chef, quedan 3 frascos de cardamomo. Alguien ha vuelto a esconder la canela.</p>
-              <button type="button">Dejar sobre el comptoir</button>
-            </aside>
-          </div>
-        </section>
-      ) : null}
-
-      <aside className="progress-rail" aria-label="Progreso del restaurante">
-        <span>Nivel {progress.level}</span>
-        <strong>{progress.levelName}</strong>
-        <div className="progress-track">
-          <div style={{ width: `${Math.min(100, (progress.points / progress.nextLevelAt) * 100)}%` }} />
-        </div>
-        <small>{progress.points}/{progress.nextLevelAt} puntos</small>
-      </aside>
+      </section>
     </main>
   );
 }
 
-function RoomToolbar({ active, onNavigate }: { active: SectionId; onNavigate: (section: SectionId) => void }) {
+function EventPrivateMedia({ event }: { event: KitchenEvent }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!supabase || !event.mediaPath || !isFutureDate(event.mediaExpiresAt)) return;
+    let cancelled = false;
+
+    void (async () => {
+      const { data, error: signedError } = await supabase.storage
+        .from(PRIVATE_MEDIA_BUCKET)
+        .createSignedUrl(event.mediaPath as string, 60 * 5);
+
+      if (cancelled) return;
+      if (signedError) {
+        setError(signedError.message);
+        return;
+      }
+      setUrl(data.signedUrl);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [event.mediaExpiresAt, event.mediaPath]);
+
+  if (!event.mediaPath) return null;
+  if (!isFutureDate(event.mediaExpiresAt)) return <p>Ce média a disparu.</p>;
+  if (error) return <p>{error}</p>;
+  if (!url) return <p>Le média apparaît doucement...</p>;
+
+  const isVideo = event.mediaType?.startsWith("video/");
+
   return (
-    <div className="room-toolbar">
-      <button type="button" onClick={() => onNavigate("home")}>
-        Salon
-      </button>
-      <span>{roomLabels[active]}</span>
-    </div>
+    <figure className="private-photo">
+      {isVideo ? (
+        <video src={url} controls playsInline preload="metadata" />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="Photo privée temporaire" />
+      )}
+      {event.mediaExpiresAt ? <figcaption>Disparaît à {eventTime(event.mediaExpiresAt)}</figcaption> : null}
+    </figure>
+  );
+}
+
+function eventTime(date: string) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Madrid",
+  }).format(new Date(date));
+}
+
+function entryDate(date: string) {
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "Europe/Madrid",
+  }).format(new Date(date));
+}
+
+function getCoverMetrics(width: number, height: number) {
+  const viewportAspect = width / height;
+  if (viewportAspect > IMAGE_ASPECT) {
+    const renderedHeight = width / IMAGE_ASPECT;
+    return { renderedWidth: width, renderedHeight, offsetX: 0, offsetY: (height - renderedHeight) / 2 };
+  }
+
+  const renderedWidth = height * IMAGE_ASPECT;
+  return { renderedWidth, renderedHeight: height, offsetX: (width - renderedWidth) / 2, offsetY: 0 };
+}
+
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function scenePointerToImagePoint(event: PointerEvent<HTMLElement>, rect: DOMRect): ImagePoint {
+  const metrics = getCoverMetrics(rect.width, rect.height);
+  const localX = event.clientX - rect.left - metrics.offsetX;
+  const localY = event.clientY - rect.top - metrics.offsetY;
+
+  return {
+    xPercent: clampPercent((localX / metrics.renderedWidth) * 100),
+    yPercent: clampPercent((localY / metrics.renderedHeight) * 100),
+  };
+}
+
+function imagePointToCssPoint(point: ImagePoint, size: { width: number; height: number }): CssPoint {
+  const cssPoint = imagePointToCssPercent(point, size);
+
+  return {
+    left: `clamp(1.1rem, ${cssPoint.leftPercent}%, calc(100% - 1.1rem))`,
+    top: `clamp(1.1rem, ${cssPoint.topPercent}%, calc(100% - 1.1rem))`,
+  };
+}
+
+function imagePointToCssPercent(point: ImagePoint, size: { width: number; height: number }) {
+  if (size.width === 0 || size.height === 0) {
+    return { leftPercent: point.xPercent, topPercent: point.yPercent };
+  }
+
+  const metrics = getCoverMetrics(size.width, size.height);
+  const left = ((metrics.offsetX + metrics.renderedWidth * (point.xPercent / 100)) / size.width) * 100;
+  const top = ((metrics.offsetY + metrics.renderedHeight * (point.yPercent / 100)) / size.height) * 100;
+
+  return { leftPercent: left, topPercent: top };
+}
+
+function contextPaperStyle(point: ImagePoint, size: { width: number; height: number }) {
+  const cssPoint = imagePointToCssPercent(point, size);
+  const shiftX = cssPoint.leftPercent > 68 ? "-100%" : cssPoint.leftPercent < 32 ? "0" : "-50%";
+  const shiftY = cssPoint.topPercent > 64 ? "-100%" : cssPoint.topPercent < 30 ? "0" : "-50%";
+
+  return {
+    left: `clamp(0.75rem, ${cssPoint.leftPercent}%, calc(100% - 0.75rem))`,
+    top: `clamp(0.75rem, ${cssPoint.topPercent}%, calc(100% - 0.75rem))`,
+    transform: `translate(${shiftX}, ${shiftY})`,
+  };
+}
+
+function lines(value: string) {
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+export function LeGrimoireApp() {
+  const sceneRef = useRef<HTMLElement | null>(null);
+  const captureInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
+  const [sceneSize, setSceneSize] = useState({ width: 0, height: 0 });
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<PrivateProfile | null>(null);
+  const [authReady, setAuthReady] = useState(!isSupabaseConfigured);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authDisplayName, setAuthDisplayName] = useState("");
+  const [claimRole, setClaimRole] = useState<ProfileRole>("serveuse");
+  const [claimCode, setClaimCode] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
+  const [place, setPlace] = useState<Place>("cuisine");
+  const [role, setRole] = useSharedState<UserRole>("le-grimoire:role", "serveuse");
+  const [chefStatus, setChefStatus] = useSharedState<ChefStatus>("le-grimoire:chef-status", "en_cuisine");
+  const [serveuseStatus, setServeuseStatus] = useSharedState<ServeuseStatus>("le-grimoire:serveuse-status", "dans_les_parages");
+  const [events, setEvents] = useSharedState<KitchenEvent[]>("le-grimoire:events", initialEvents);
+  const [seenEventIds, setSeenEventIds] = useSharedState<string[]>("le-grimoire:seen-events", initialSeenEvents);
+  const [placedItems, setPlacedItems] = useSharedState<ScenePlacedItem[]>("le-grimoire:placed-items", initialPlacedItems);
+  const [grimoireEntries, setGrimoireEntries] = useSharedState<GrimoireEntry[]>("le-grimoire:grimoire-entries", initialGrimoireEntries);
+  const [wallets, setWallets] = useSharedState<Wallets>("le-grimoire:wallets", initialWallets);
+  const [caisseEntries, setCaisseEntries] = useSharedState<CaisseEntry[]>("le-grimoire:caisse-entries", initialEntries);
+  const [sharedItems, setSharedItems] = useSharedState<SharedKitchenItem[]>("le-grimoire:shared-items", initialSharedItems);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [placingType, setPlacingType] = useState<PlacedItemType | null>(null);
+  const [previewPoint, setPreviewPoint] = useState<ImagePoint | null>(null);
+  const [draftPlacement, setDraftPlacement] = useState<(ImagePoint & { scene: SceneName; type: PlacedItemType }) | null>(null);
+  const [draftMessage, setDraftMessage] = useState("");
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [passageOpen, setPassageOpen] = useState(false);
+  const [distractionOpen, setDistractionOpen] = useState(false);
+  const [distractionText, setDistractionText] = useState("");
+  const [distractionFile, setDistractionFile] = useState<File | null>(null);
+  const [distractionDurationHours, setDistractionDurationHours] = useState(12);
+  const [distractionBusy, setDistractionBusy] = useState(false);
+  const [caisseMode, setCaisseMode] = useState<CaisseMode>("overview");
+  const [tipTo, setTipTo] = useState<UserRole>("chef");
+  const [tipAmount, setTipAmount] = useState(10);
+  const [tipMessage, setTipMessage] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [grimoireSection, setGrimoireSection] = useState<GrimoireSection>("index");
+  const [activeGrimoireId, setActiveGrimoireId] = useState<string | null>(null);
+  const [grimoireDraftOpen, setGrimoireDraftOpen] = useState(false);
+  const [grimoireDraft, setGrimoireDraft] = useState<GrimoireDraft>(createEmptyGrimoireDraft());
+  const [pourToiReply, setPourToiReply] = useState("");
+
+  const isChef = role === "chef";
+  const passageEvents = events.filter(
+    (event) => event.from !== role && (!event.to || event.to === role) && isFutureDate(event.mediaExpiresAt),
+  );
+  const newestEvent = passageEvents[0];
+  const activeScene: SceneName = place === "pause" ? "pause" : "cuisine";
+  const sceneImage = place === "pause" ? "/scenes/back-alley.webp" : "/scenes/cuisine-main.png";
+  const sceneAlt =
+    place === "pause"
+      ? "Callejón trasero nocturno con puerta de cocina, escalones, lata y papel escondido"
+      : "Cuisine professionnelle intime avec cuivre, table centrale, grimoire, caisse et porte EXIT";
+  const hasWaitingPauseItem = placedItems.some(
+    (item) => item.scene === "pause" && item.recipientId === role && !item.collectedAt,
+  );
+  const activeItem = activeItemId ? placedItems.find((item) => item.id === activeItemId) : undefined;
+  const newestEventSeen = newestEvent ? seenEventIds.includes(newestEvent.id) : false;
+
+  useEffect(() => {
+    const node = sceneRef.current;
+    if (!node) return;
+
+    const updateSize = () => {
+      const rect = node.getBoundingClientRect();
+      setSceneSize({ width: rect.width, height: rect.height });
+    };
+
+    updateSize();
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    let cancelled = false;
+
+    async function loadProfile(activeSession: Session | null) {
+      if (!supabase || !activeSession) {
+        setProfile(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, role, display_name")
+        .eq("id", activeSession.user.id)
+        .maybeSingle<PrivateProfile>();
+
+      if (cancelled) return;
+
+      if (error) {
+        setAuthError(error.message);
+        setProfile(null);
+        return;
+      }
+
+      setProfile(data ?? null);
+      if (data?.role) {
+        setRole(profileRoleToUserRole(data.role));
+      }
+    }
+
+    void (async () => {
+      const { data, error } = await supabase.auth.getSession();
+      if (cancelled) return;
+      if (error) setAuthError(error.message);
+      setSession(data.session);
+      await loadProfile(data.session);
+      if (!cancelled) setAuthReady(true);
+    })();
+
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthError("");
+      void loadProfile(nextSession);
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.subscription.unsubscribe();
+    };
+  }, [setRole]);
+
+  async function reloadProfile() {
+    if (!supabase || !session) return;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, role, display_name")
+      .eq("id", session.user.id)
+      .maybeSingle<PrivateProfile>();
+
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+
+    setProfile(data ?? null);
+    if (data?.role) setRole(profileRoleToUserRole(data.role));
+  }
+
+  async function submitAuth(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    setAuthBusy(true);
+    setAuthError("");
+
+    const credentials = { email: authEmail.trim(), password: authPassword };
+    const result =
+      authMode === "signup"
+        ? await supabase.auth.signUp(credentials)
+        : await supabase.auth.signInWithPassword(credentials);
+
+    if (result.error) {
+      setAuthError(result.error.message);
+    } else if (authMode === "signup" && !result.data.session) {
+      setAuthError("Compte créé. Si Supabase demande confirmation, vérifie l’email avant d’entrer.");
+    }
+
+    setAuthBusy(false);
+  }
+
+  async function submitClaim(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!supabase) return;
+    setAuthBusy(true);
+    setAuthError("");
+
+    const { error } = await supabase.rpc("claim_private_role", {
+      requested_role: claimRole,
+      invite_code: claimCode,
+      display_name: authDisplayName,
+    });
+
+    if (error) {
+      setAuthError(error.message);
+    } else {
+      setClaimCode("");
+      await reloadProfile();
+    }
+
+    setAuthBusy(false);
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setProfile(null);
+    setSession(null);
+  }
+
+  function addEvent(
+    from: UserRole,
+    title: string,
+    message: string,
+    to?: UserRole,
+    media?: Pick<KitchenEvent, "mediaPath" | "mediaExpiresAt" | "mediaType">,
+  ) {
+    setEvents((current) => [
+      {
+        id: `event-${Date.now()}`,
+        from,
+        to,
+        title,
+        message,
+        date: nowIso(),
+        ...media,
+      },
+      ...current,
+    ]);
+    setPassageOpen(false);
+  }
+
+  function beginPlacement(type: PlacedItemType) {
+    setPlacingType(type);
+    setDraftPlacement(null);
+    setDraftMessage("");
+    setDrawerOpen(false);
+  }
+
+  function handleScenePointerMove(event: PointerEvent<HTMLElement>) {
+    if (!placingType || !sceneRef.current || (place !== "cuisine" && place !== "pause")) return;
+    setPreviewPoint(scenePointerToImagePoint(event, sceneRef.current.getBoundingClientRect()));
+  }
+
+  function handleSceneClick(event: PointerEvent<HTMLElement>) {
+    if (!placingType || !sceneRef.current || (place !== "cuisine" && place !== "pause")) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, textarea, input, select, .paper-modal, .action-drawer, .caisse-drawer")) return;
+
+    const point = scenePointerToImagePoint(event, sceneRef.current.getBoundingClientRect());
+    setDraftPlacement({ ...point, scene: activeScene, type: placingType });
+    setPreviewPoint(point);
+    setPlacingType(null);
+  }
+
+  function cancelPlacement() {
+    setPlacingType(null);
+    setDraftPlacement(null);
+    setPreviewPoint(null);
+    setDraftMessage("");
+  }
+
+  function placeDraftItem() {
+    if (!draftPlacement) return;
+    const message = draftMessage.trim();
+
+    setPlacedItems((current) => [
+      {
+        id: `placed-${Date.now()}`,
+        scene: draftPlacement.scene,
+        xPercent: draftPlacement.xPercent,
+        yPercent: draftPlacement.yPercent,
+        type: draftPlacement.type,
+        authorId: role,
+        recipientId: otherRole(role),
+        message,
+        createdAt: nowIso(),
+      },
+      ...current,
+    ]);
+    addEvent(role, `${roleLabels[role]} a laissé quelque chose.`, "Quelque chose attend quelque part. Il faut regarder.", otherRole(role));
+    setDraftPlacement(null);
+    setPreviewPoint(null);
+    setDraftMessage("");
+  }
+
+  function collectItem(id: string) {
+    setPlacedItems((current) => current.map((item) => (item.id === id ? { ...item, collectedAt: nowIso() } : item)));
+    setActiveItemId(null);
+  }
+
+  async function uploadPrivateMedia(file: File, expiresAt: string) {
+    if (!supabase || !session) {
+      throw new Error("Supabase Auth est nécessaire pour envoyer une photo privée.");
+    }
+
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+    if (!isImage && !isVideo) {
+      throw new Error("Choisis une photo ou une petite vidéo.");
+    }
+
+    const maxBytes = 50 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new Error("La vidéo est trop lourde. Essaie un extrait plus court.");
+    }
+
+    const mediaBlob = isImage ? await stripImageMetadata(file) : file;
+    const extension = isImage ? "webp" : safeStorageName(file.name.split(".").pop() ?? "video");
+    const storageName = safeStorageName(file.name.replace(/\.[^.]+$/, "")) || (isImage ? "photo" : "video");
+    const contentType = isImage ? "image/webp" : file.type || "video/mp4";
+    const path = `${session.user.id}/${Date.now()}-${storageName}.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from(PRIVATE_MEDIA_BUCKET)
+      .upload(path, mediaBlob, {
+        contentType,
+        upsert: false,
+      });
+
+    if (uploadError) throw uploadError;
+
+    const { error: rowError } = await supabase.from("private_media").insert({
+      sender_id: session.user.id,
+      recipient_role: userRoleToProfileRole(otherRole(role)),
+      storage_path: path,
+      scene: activeScene,
+      kind: isImage ? "image" : "video",
+      message: distractionText.trim(),
+      expires_at: expiresAt,
+    });
+
+    if (rowError) throw rowError;
+
+    return { path, contentType };
+  }
+
+  async function submitDistraction() {
+    const message = distractionText.trim();
+    if (!message && !distractionFile) return;
+
+    setDistractionBusy(true);
+    try {
+      const expiresAt = expirationFromDuration(distractionDurationHours);
+      const media = distractionFile ? await uploadPrivateMedia(distractionFile, expiresAt) : undefined;
+      addEvent(
+        "serveuse",
+        "💋 Serveuse est passée.",
+        message || "Elle a laissé une distraction privée.",
+        "chef",
+        media ? { mediaPath: media.path, mediaExpiresAt: expiresAt, mediaType: media.contentType } : undefined,
+      );
+      setDistractionText("");
+      setDistractionFile(null);
+      setDistractionOpen(false);
+      setDrawerOpen(false);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Impossible d’envoyer la photo privée.");
+    } finally {
+      setDistractionBusy(false);
+    }
+  }
+
+  function sendTip() {
+    const amount = Math.max(1, Math.floor(tipAmount));
+    if (tipTo === role || wallets[role] < amount) return;
+    const message = tipMessage.trim() || "Pour avoir survécu au service.";
+
+    setWallets((current) => ({
+      ...current,
+      [role]: current[role] - amount,
+      [tipTo]: current[tipTo] + amount,
+    }));
+    setCaisseEntries((current) => [
+      {
+        id: `entry-${Date.now()}`,
+        from: role,
+        to: tipTo,
+        type: "tip",
+        amount,
+        message,
+        date: nowIso(),
+      },
+      ...current,
+    ]);
+    addEvent(role, `🪙 +${amount} pour ${roleLabels[tipTo]}`, message, tipTo);
+    setTipAmount(10);
+    setTipMessage("");
+    setCaisseMode("overview");
+  }
+
+  function buyKitchenItem(item: (typeof boutiqueItems)[number]) {
+    if (wallets[role] < item.cost || sharedItems.some((owned) => owned.id === item.id)) return;
+
+    setWallets((current) => ({
+      ...current,
+      [role]: current[role] - item.cost,
+    }));
+    setSharedItems((current) => [
+      ...current,
+      {
+        id: item.id,
+        name: item.name,
+        cost: item.cost,
+        boughtBy: role,
+        date: nowIso(),
+      },
+    ]);
+    setCaisseEntries((current) => [
+      {
+        id: `entry-${Date.now()}`,
+        from: role,
+        type: "shop",
+        amount: item.cost,
+        item: item.name,
+        message: `${item.name} rejoint la cuisine partagée.`,
+        date: nowIso(),
+      },
+      ...current,
+    ]);
+    addEvent(role, "Objet installé", `${item.name} rejoint la cuisine partagée.`);
+  }
+
+  function openGrimoireSection(section: GrimoireSection) {
+    setGrimoireSection(section);
+    setGrimoireDraftOpen(false);
+    if (section === "index") {
+      setActiveGrimoireId(null);
+      return;
+    }
+
+    const firstEntry = grimoireEntries.find((entry) => entry.section === section);
+    setActiveGrimoireId(firstEntry?.id ?? null);
+    setGrimoireDraft(createEmptyGrimoireDraft(section));
+  }
+
+  function updateGrimoireStatus(id: string, status: GrimoireEntry["status"]) {
+    setGrimoireEntries((current) => current.map((entry) => (entry.id === id ? { ...entry, status } : entry)));
+  }
+
+  function updatePourToiReply(id: string, reply: string) {
+    const cleanReply = reply.trim();
+    if (!cleanReply) return;
+
+    setGrimoireEntries((current) =>
+      current.map((entry) =>
+        entry.id === id
+          ? {
+              ...entry,
+              reaction: cleanReply,
+              chefDecision: role === "chef" && entry.kind === "envie" ? cleanReply : entry.chefDecision,
+            }
+          : entry,
+      ),
+    );
+    setPourToiReply("");
+    addEvent(role, "Réponse dans Pour toi", "Une page du Grimoire a reçu une réponse.", otherRole(role));
+  }
+
+  function addPourToiToChefRecipes(entry: GrimoireEntry) {
+    if (!isChef) return;
+
+    const recipe: GrimoireEntry = {
+      id: `recipe-from-pour-toi-${Date.now()}`,
+      section: "chef",
+      kind: "recipe",
+      title: entry.dishIdea || entry.chefDecision || entry.title,
+      from: "chef",
+      date: nowIso(),
+      ingredients: entry.flavors || entry.ingredients || "À préciser",
+      quantities: "À préciser",
+      time: "À préciser",
+      temperatures: "À préciser",
+      preparation: entry.chefDecision || entry.description || entry.preparation || "À compléter.",
+      techniques: "À préciser",
+      notes: `Né dans Pour toi. ${entry.petitMot || entry.notes || ""}`.trim(),
+      next: "Compléter les détails techniques après service.",
+    };
+
+    setGrimoireEntries((current) => [recipe, ...current]);
+    setGrimoireSection("chef");
+    setActiveGrimoireId(recipe.id);
+    addEvent("chef", "Une idée devient recette", "Une page Pour toi a rejoint les Recettes du Chef.", otherRole("chef"));
+  }
+
+  function addGrimoireEntry() {
+    const isPourToiDraft = grimoireDraft.section === "pour_toi";
+    const title =
+      grimoireDraft.title.trim() ||
+      grimoireDraft.dishIdea?.trim() ||
+      grimoireDraft.envie?.trim() ||
+      (grimoireDraft.kind === "ferais" ? "Je te ferais..." : "J’ai envie de...");
+    const preparation = isPourToiDraft
+      ? grimoireDraft.kind === "ferais"
+        ? grimoireDraft.description?.trim() || grimoireDraft.dishIdea?.trim() || title
+        : grimoireDraft.envie?.trim() || grimoireDraft.flavors?.trim() || title
+      : grimoireDraft.preparation.trim();
+    if (!title || !preparation) return;
+
+    const entry: GrimoireEntry = {
+      id: `grimoire-${Date.now()}`,
+      section: grimoireDraft.section,
+      kind: grimoireDraft.kind,
+      title,
+      from: role,
+      to: grimoireDraft.section === "pour_toi" ? otherRole(role) : undefined,
+      date: nowIso(),
+      ingredients: grimoireDraft.ingredients.trim() || grimoireDraft.flavors?.trim() || "À préciser",
+      quantities: "À préciser",
+      time: "À préciser",
+      temperatures: "À préciser",
+      preparation,
+      techniques: "À préciser",
+      notes: grimoireDraft.notes.trim(),
+      next: "",
+      status: grimoireDraft.section === "pour_toi" ? "envoyé" : undefined,
+      envie: grimoireDraft.envie?.trim(),
+      flavors: grimoireDraft.flavors?.trim(),
+      avoid: grimoireDraft.avoid?.trim(),
+      mood: grimoireDraft.mood?.trim(),
+      liberty: grimoireDraft.liberty,
+      petitMot: grimoireDraft.petitMot?.trim(),
+      dishIdea: grimoireDraft.dishIdea?.trim(),
+      description: grimoireDraft.description?.trim(),
+      whyYou: grimoireDraft.whyYou?.trim(),
+    };
+
+    setGrimoireEntries((current) => [entry, ...current]);
+    setActiveGrimoireId(entry.id);
+    setGrimoireSection(entry.section);
+    setGrimoireDraft(createEmptyGrimoireDraft(entry.section));
+    setGrimoireDraftOpen(false);
+    addEvent(role, "Page ajoutée au Grimoire", title, grimoireDraft.section === "pour_toi" ? otherRole(role) : undefined);
+  }
+
+  if (isSupabaseConfigured && !authReady) {
+    return (
+      <PrivateDoor
+        state="loading"
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        displayName={authDisplayName}
+        claimRole={claimRole}
+        claimCode={claimCode}
+        error={authError}
+        busy={authBusy}
+        onModeChange={setAuthMode}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onDisplayNameChange={setAuthDisplayName}
+        onClaimRoleChange={setClaimRole}
+        onClaimCodeChange={setClaimCode}
+        onSubmitAuth={submitAuth}
+        onSubmitClaim={submitClaim}
+      />
+    );
+  }
+
+  if (isSupabaseConfigured && !session) {
+    return (
+      <PrivateDoor
+        state="login"
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        displayName={authDisplayName}
+        claimRole={claimRole}
+        claimCode={claimCode}
+        error={authError}
+        busy={authBusy}
+        onModeChange={setAuthMode}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onDisplayNameChange={setAuthDisplayName}
+        onClaimRoleChange={setClaimRole}
+        onClaimCodeChange={setClaimCode}
+        onSubmitAuth={submitAuth}
+        onSubmitClaim={submitClaim}
+      />
+    );
+  }
+
+  if (isSupabaseConfigured && session && !profile) {
+    return (
+      <PrivateDoor
+        state="claim"
+        mode={authMode}
+        email={authEmail}
+        password={authPassword}
+        displayName={authDisplayName}
+        claimRole={claimRole}
+        claimCode={claimCode}
+        error={authError}
+        busy={authBusy}
+        onModeChange={setAuthMode}
+        onEmailChange={setAuthEmail}
+        onPasswordChange={setAuthPassword}
+        onDisplayNameChange={setAuthDisplayName}
+        onClaimRoleChange={setClaimRole}
+        onClaimCodeChange={setClaimCode}
+        onSubmitAuth={submitAuth}
+        onSubmitClaim={submitClaim}
+        onSignOut={signOut}
+      />
+    );
+  }
+
+  const baseObjectHotspots: SceneHotspot[] = [
+    {
+      id: "grimoire",
+      label: "Grimoire",
+      xPercent: 80,
+      yPercent: 82,
+      widthPercent: 17,
+      heightPercent: 11,
+      action: () => setPlace("grimoire"),
+      state: "object",
+    },
+    {
+      id: "caisse",
+      label: "Caisse",
+      xPercent: 91,
+      yPercent: 55,
+      widthPercent: 12,
+      heightPercent: 17,
+      action: () => {
+        setCaisseMode("overview");
+        setTipTo(otherRole(role));
+        setPlace("caisse");
+      },
+      state: "object",
+    },
+    {
+      id: "exit",
+      label: "Sortie",
+      xPercent: 61,
+      yPercent: 17,
+      widthPercent: 6,
+      heightPercent: 9,
+      action: () => setPlace("pause"),
+      state: hasWaitingPauseItem ? "exit" : "quiet",
+    },
+  ];
+
+  const pauseHotspots: SceneHotspot[] = [
+    {
+      id: "pause-door",
+      label: "Cuisine",
+      xPercent: 19,
+      yPercent: 37,
+      widthPercent: 22,
+      heightPercent: 54,
+      action: () => setPlace("cuisine"),
+      state: "object",
+    },
+    {
+      id: "old-letters",
+      label: "Boîte",
+      xPercent: 22,
+      yPercent: 84,
+      widthPercent: 12,
+      heightPercent: 12,
+      action: () => beginPlacement("lettre"),
+      state: "secret",
+    },
+  ];
+
+  const visibleHotspots = place === "cuisine" ? baseObjectHotspots : place === "pause" ? pauseHotspots : [];
+  const visibleItems = placedItems.filter((item) => item.scene === activeScene && !item.collectedAt);
+  const previewCss = previewPoint ? imagePointToCssPoint(previewPoint, sceneSize) : null;
+  const draftCss = draftPlacement ? contextPaperStyle(draftPlacement, sceneSize) : null;
+  const draftItemTypes = draftPlacement?.scene === "pause" ? pauseItemTypes : cuisineItemTypes;
+  const currentGrimoireEntries = grimoireSection === "index" ? [] : grimoireEntries.filter((entry) => entry.section === grimoireSection);
+  const activeGrimoireEntry =
+    currentGrimoireEntries.find((entry) => entry.id === activeGrimoireId) ?? currentGrimoireEntries[0];
+  const canRespondToActiveGrimoireEntry =
+    activeGrimoireEntry?.section === "pour_toi" && activeGrimoireEntry.to === role;
+
+  return (
+    <main className="private-kitchen">
+      <section
+        ref={sceneRef}
+        className={place === "pause" ? "world-scene pause-scene" : "world-scene kitchen-scene"}
+        aria-label={place === "pause" ? "La Pause" : "La Cuisine"}
+        onClick={handleSceneClick}
+        onPointerMove={handleScenePointerMove}
+      >
+        <Image src={sceneImage} alt={sceneAlt} fill priority unoptimized sizes="100vw" className="scene-image" />
+        <div className="scene-vignette" />
+
+        {isSupabaseConfigured ? (
+          <div className="role-pin locked" aria-label="Rôle connecté">
+            <strong>{roleLabels[role]}</strong>
+            <button type="button" onClick={signOut}>
+              Sortir
+            </button>
+          </div>
+        ) : (
+          <div className="role-pin" aria-label="Changer de rôle">
+            <button type="button" className={role === "chef" ? "active" : ""} onClick={() => setRole("chef")}>
+              Chef
+            </button>
+            <button type="button" className={role === "serveuse" ? "active" : ""} onClick={() => setRole("serveuse")}>
+              Serveuse
+            </button>
+          </div>
+        )}
+
+        {place !== "cuisine" ? (
+          <button className="return-cuisine" type="button" onClick={() => setPlace("cuisine")}>
+            Cuisine
+          </button>
+        ) : null}
+
+        {visibleHotspots.map((hotspot) => (
+          <button
+            key={hotspot.id}
+            type="button"
+            className={`scene-hotspot ${hotspot.state ?? "quiet"}`}
+            style={{
+              ...imagePointToCssPoint(hotspot, sceneSize),
+              width: `${hotspot.widthPercent}%`,
+              height: `${hotspot.heightPercent}%`,
+            }}
+            onClick={hotspot.action}
+            aria-label={hotspot.label}
+          >
+            <span>{hotspot.label}</span>
+          </button>
+        ))}
+
+        {(place === "cuisine" || place === "pause") && (
+          <>
+            {visibleItems.map((item) => {
+              const cssPoint = imagePointToCssPoint(item, sceneSize);
+              const meta = itemMeta[item.type];
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={`placed-item ${item.type}`}
+                  style={cssPoint}
+                  onClick={() => setActiveItemId(item.id)}
+                  aria-label={`${meta.label} de ${roleLabels[item.authorId]}`}
+                >
+                  <span>{meta.mark}</span>
+                </button>
+              );
+            })}
+            {previewCss && placingType ? (
+              <span className={`placed-item ghost ${placingType}`} style={previewCss} aria-hidden="true">
+                <span>{itemMeta[placingType].mark}</span>
+              </span>
+            ) : null}
+          </>
+        )}
+
+        {place === "cuisine" ? (
+          <>
+            <aside className="service-board">
+              <span>Le Chef</span>
+              <strong>{statusLine(chefStatuses, chefStatus)}</strong>
+              {isChef ? (
+                <div>
+                  {chefStatuses.map((status) => (
+                    <button key={status.id} type="button" className={chefStatus === status.id ? "active" : ""} onClick={() => setChefStatus(status.id)}>
+                      {status.label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </aside>
+
+            <aside className="serveuse-tag">
+              <span>Serveuse</span>
+              <strong>{statusLine(serveuseStatuses, serveuseStatus)}</strong>
+              {isChef ? null : (
+                <div>
+                  {serveuseStatuses.map((status) => (
+                    <button key={status.id} type="button" className={serveuseStatus === status.id ? "active" : ""} onClick={() => setServeuseStatus(status.id)}>
+                      {status.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </aside>
+          </>
+        ) : null}
+
+        {(place === "cuisine" || place === "pause") && (
+          <>
+            <aside className={passageOpen ? "passage-ticket open" : "passage-ticket"}>
+              <span>Dernier passage</span>
+              {newestEvent ? (
+                <>
+                  <button className="ticket-summary" type="button" onClick={() => setPassageOpen((current) => !current)}>
+                    <strong>{newestEvent.title}</strong>
+                    <time>{eventTime(newestEvent.date)}</time>
+                  </button>
+                  {passageOpen ? (
+                    <>
+                      <p>{newestEvent.message}</p>
+                      <EventPrivateMedia event={newestEvent} />
+                      {isChef ? (
+                        <div className="tiny-actions">
+                          {chefResponses.map((response) => (
+                            <button key={response.title} type="button" onClick={() => addEvent("chef", response.title, response.message, "serveuse")}>
+                              {response.title}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      <button className="vu-button" type="button" onClick={() => setSeenEventIds((current) => (current.includes(newestEvent.id) ? current : [...current, newestEvent.id]))}>
+                        {newestEventSeen ? "VU ✓" : "Marquer VU"}
+                      </button>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <p>Rien pour toi pour l’instant.</p>
+              )}
+            </aside>
+
+            <aside className={drawerOpen ? "action-drawer open" : "action-drawer"} aria-label="Actions">
+              <button className="drawer-pull" type="button" onClick={() => setDrawerOpen((current) => !current)} aria-label="Actions">
+                ✦
+              </button>
+              {drawerOpen ? (
+                <div>
+                  <span>Actions</span>
+                  <button type="button" onClick={() => beginPlacement(activeScene === "pause" ? "lettre" : "bisou")}>
+                    💌 Laisser quelque chose
+                  </button>
+                  {!isChef && activeScene === "cuisine" ? (
+                    <button type="button" onClick={() => setDistractionOpen(true)}>
+                      💋 Distraire
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCaisseMode("tip");
+                      setTipTo(otherRole(role));
+                      setPlace("caisse");
+                      setDrawerOpen(false);
+                    }}
+                  >
+                    🪙 Pourboire
+                  </button>
+                </div>
+              ) : null}
+            </aside>
+
+            {placingType ? (
+              <div className="placement-hint">
+                <b>{itemMeta[placingType].mark}</b>
+                Choisis un endroit.
+                <button type="button" onClick={cancelPlacement}>
+                  Annuler
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
+
+        {place === "grimoire" ? (
+          <section className="grimoire-book" aria-label="Le Grimoire">
+            <button className="book-close" type="button" onClick={() => setPlace("cuisine")}>
+              Fermer
+            </button>
+            <nav className="book-tabs" aria-label="Sections du Grimoire">
+              {grimoireSections.map((section) => (
+                <button
+                  key={section.id}
+                  type="button"
+                  className={grimoireSection === section.id ? "active" : ""}
+                  onClick={() => openGrimoireSection(section.id)}
+                >
+                  {section.label}
+                </button>
+              ))}
+            </nav>
+
+            {grimoireSection === "index" ? (
+              <div className="book-spread index-spread">
+                <article className="book-page left-page">
+                  <span>Le Grimoire</span>
+                  <h1>Index</h1>
+                  <p>Le livre de la cuisine privée. Rien ici n’a besoin d’impressionner quelqu’un dehors.</p>
+                </article>
+                <article className="book-page right-page">
+                  {grimoireSections
+                    .filter((section) => section.id !== "index")
+                    .map((section) => (
+                      <button key={section.id} type="button" className="index-line" onClick={() => openGrimoireSection(section.id)}>
+                        <strong>{section.label}</strong>
+                        <small>{section.description}</small>
+                      </button>
+                    ))}
+                </article>
+              </div>
+            ) : (
+              <div className="book-spread">
+                <article className="book-page left-page">
+                  <span>{grimoireSections.find((section) => section.id === grimoireSection)?.label}</span>
+                  {grimoireDraftOpen ? (
+                    grimoireDraft.section === "pour_toi" ? (
+                      <div className="book-form pour-toi-form">
+                        <div className="pour-toi-switch" aria-label="Type de page Pour toi">
+                          <button
+                            type="button"
+                            className={grimoireDraft.kind === "envie" ? "active" : ""}
+                            onClick={() => setGrimoireDraft((current) => ({ ...current, kind: "envie" }))}
+                          >
+                            J’ai envie de...
+                          </button>
+                          <button
+                            type="button"
+                            className={grimoireDraft.kind === "ferais" ? "active" : ""}
+                            onClick={() => setGrimoireDraft((current) => ({ ...current, kind: "ferais" }))}
+                          >
+                            Je te ferais...
+                          </button>
+                        </div>
+                        {grimoireDraft.kind === "envie" ? (
+                          <>
+                            <h2>J’ai envie de...</h2>
+                            <label>
+                              J’ai envie de
+                              <textarea
+                                value={grimoireDraft.envie}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, envie: event.target.value }))}
+                                placeholder="Quelque chose de chaud..."
+                              />
+                            </label>
+                            <label>
+                              Saveurs / ingrédients
+                              <input
+                                value={grimoireDraft.flavors}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, flavors: event.target.value }))}
+                                placeholder="Pistache + chocolat noir"
+                              />
+                            </label>
+                            <label>
+                              Je ne veux pas
+                              <input
+                                value={grimoireDraft.avoid}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, avoid: event.target.value }))}
+                                placeholder="Pas trop sucré"
+                              />
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <h2>Je te ferais...</h2>
+                            <label>
+                              Nom / idée du plat
+                              <textarea
+                                value={grimoireDraft.dishIdea}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, dishIdea: event.target.value }))}
+                                placeholder="Entrecôte, pommes dauphines, jus au poivre..."
+                              />
+                            </label>
+                            <label>
+                              Description
+                              <textarea
+                                value={grimoireDraft.description}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, description: event.target.value }))}
+                                placeholder="Ce que je cuisinerais aujourd’hui..."
+                              />
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="book-form">
+                        <label>
+                          Nom
+                          <input
+                            value={grimoireDraft.title}
+                            onChange={(event) => setGrimoireDraft((current) => ({ ...current, title: event.target.value }))}
+                            placeholder="Nom de la recette"
+                          />
+                        </label>
+                        <label>
+                          Ingrédients
+                          <textarea
+                            value={grimoireDraft.ingredients}
+                            onChange={(event) => setGrimoireDraft((current) => ({ ...current, ingredients: event.target.value }))}
+                            placeholder="Un ingrédient par ligne"
+                          />
+                        </label>
+                      </div>
+                    )
+                  ) : (
+                    <>
+                      <div className="book-entry-list">
+                        {currentGrimoireEntries.length > 0 ? (
+                          currentGrimoireEntries.map((entry) => (
+                            <button
+                              key={entry.id}
+                              type="button"
+                              className={activeGrimoireEntry?.id === entry.id ? "active" : ""}
+                              onClick={() => setActiveGrimoireId(entry.id)}
+                            >
+                              <strong>{entry.title}</strong>
+                              <small>
+                                {roleLabels[entry.from]} · {entryDate(entry.date)}
+                              </small>
+                            </button>
+                          ))
+                        ) : (
+                          <p>Cette section attend sa première page.</p>
+                        )}
+                      </div>
+                      {activeGrimoireEntry ? (
+                        activeGrimoireEntry.section === "pour_toi" ? (
+                          <div className={`ingredient-ink pour-toi-paper ${activeGrimoireEntry.kind}`}>
+                            <h2>{activeGrimoireEntry.kind === "envie" ? "J’ai envie de..." : "Je te ferais..."}</h2>
+                            <p className="from-line">
+                              {roleLabels[activeGrimoireEntry.from]} → {roleLabels[activeGrimoireEntry.to ?? otherRole(activeGrimoireEntry.from)]}
+                            </p>
+                            <h3>{activeGrimoireEntry.title}</h3>
+                            {activeGrimoireEntry.kind === "envie" ? (
+                              <>
+                                <p>{activeGrimoireEntry.envie || activeGrimoireEntry.preparation}</p>
+                                {activeGrimoireEntry.flavors ? (
+                                  <>
+                                    <h3>Saveurs / ingrédients</h3>
+                                    <p>{activeGrimoireEntry.flavors}</p>
+                                  </>
+                                ) : null}
+                                {activeGrimoireEntry.avoid ? (
+                                  <>
+                                    <h3>Je ne veux pas</h3>
+                                    <p>{activeGrimoireEntry.avoid}</p>
+                                  </>
+                                ) : null}
+                                {activeGrimoireEntry.liberty ? (
+                                  <>
+                                    <h3>Liberté du Chef</h3>
+                                    <p>{activeGrimoireEntry.liberty}</p>
+                                  </>
+                                ) : null}
+                              </>
+                            ) : (
+                              <>
+                                <p>{activeGrimoireEntry.dishIdea || activeGrimoireEntry.preparation}</p>
+                                {activeGrimoireEntry.description ? <p>{activeGrimoireEntry.description}</p> : null}
+                                {activeGrimoireEntry.whyYou ? (
+                                  <>
+                                    <h3>Pourquoi</h3>
+                                    <p>{activeGrimoireEntry.whyYou}</p>
+                                  </>
+                                ) : null}
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="ingredient-ink">
+                            <h2>{activeGrimoireEntry.title}</h2>
+                            <dl>
+                              <div>
+                                <dt>Temps</dt>
+                                <dd>{activeGrimoireEntry.time}</dd>
+                              </div>
+                              <div>
+                                <dt>Températures</dt>
+                                <dd>{activeGrimoireEntry.temperatures}</dd>
+                              </div>
+                            </dl>
+                            <h3>Ingrédients</h3>
+                            <ul>
+                              {lines(activeGrimoireEntry.ingredients).map((ingredient) => (
+                                <li key={ingredient}>{ingredient}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )
+                      ) : null}
+                    </>
+                  )}
+                </article>
+
+                <article className="book-page right-page">
+                  {grimoireDraftOpen ? (
+                    <div className="book-form">
+                      {grimoireDraft.section === "pour_toi" ? (
+                        grimoireDraft.kind === "envie" ? (
+                          <>
+                            <label>
+                              Humeur
+                              <input
+                                value={grimoireDraft.mood}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, mood: event.target.value }))}
+                                placeholder="Fatiguée, affamée, dangereuse..."
+                              />
+                            </label>
+                            <label>
+                              Liberté du Chef
+                              <select
+                                value={grimoireDraft.liberty}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, liberty: event.target.value as PourToiLiberty }))}
+                              >
+                                <option>Totale</option>
+                                <option>Quelques indications</option>
+                                <option>Très précise</option>
+                              </select>
+                            </label>
+                            <label>
+                              Petit mot
+                              <textarea
+                                value={grimoireDraft.petitMot}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, petitMot: event.target.value }))}
+                                placeholder="Surprends-moi. Mais si c’est moche, je juge."
+                              />
+                            </label>
+                          </>
+                        ) : (
+                          <>
+                            <label>
+                              Pourquoi
+                              <textarea
+                                value={grimoireDraft.whyYou}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, whyYou: event.target.value }))}
+                                placeholder="Parce que tu dis que tu n’as pas faim..."
+                              />
+                            </label>
+                            <label>
+                              Petit mot
+                              <textarea
+                                value={grimoireDraft.petitMot}
+                                onChange={(event) => setGrimoireDraft((current) => ({ ...current, petitMot: event.target.value }))}
+                                placeholder="Petit mot pour l’autre..."
+                              />
+                            </label>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <label>
+                            Préparation
+                            <textarea
+                              value={grimoireDraft.preparation}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, preparation: event.target.value }))}
+                              placeholder="Écrire sur la page..."
+                            />
+                          </label>
+                          <label>
+                            Notes
+                            <textarea
+                              value={grimoireDraft.notes}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, notes: event.target.value }))}
+                              placeholder="Pour la prochaine fois..."
+                            />
+                          </label>
+                        </>
+                      )}
+                      <div className="book-actions">
+                        <button type="button" onClick={() => setGrimoireDraftOpen(false)}>
+                          Annuler
+                        </button>
+                        <button type="button" onClick={addGrimoireEntry}>
+                          Encrer la page
+                        </button>
+                      </div>
+                    </div>
+                  ) : activeGrimoireEntry ? (
+                    activeGrimoireEntry.section === "pour_toi" ? (
+                      <>
+                        <span>
+                          {activeGrimoireEntry.status === "en_cours"
+                            ? "Le Chef s’en occupe"
+                            : activeGrimoireEntry.status === "servi"
+                              ? "Servi"
+                              : "Envoyé"}
+                        </span>
+                        <h2>{activeGrimoireEntry.kind === "envie" ? "Commande personnelle" : "Réponse possible"}</h2>
+                        {activeGrimoireEntry.petitMot || activeGrimoireEntry.notes ? (
+                          <>
+                            <h3>Petit mot</h3>
+                            <p>{activeGrimoireEntry.petitMot || activeGrimoireEntry.notes}</p>
+                          </>
+                        ) : null}
+                        {activeGrimoireEntry.mood ? (
+                          <>
+                            <h3>Humeur</h3>
+                            <p>{activeGrimoireEntry.mood}</p>
+                          </>
+                        ) : null}
+                        {activeGrimoireEntry.chefDecision ? (
+                          <>
+                            <h3>Le Chef a décidé</h3>
+                            <p>{activeGrimoireEntry.chefDecision}</p>
+                          </>
+                        ) : null}
+                        {activeGrimoireEntry.reaction ? (
+                          <>
+                            <h3>Réponse</h3>
+                            <p>{activeGrimoireEntry.reaction}</p>
+                          </>
+                        ) : null}
+                        {canRespondToActiveGrimoireEntry ? (
+                          <>
+                            <div className="book-actions reaction-actions">
+                              {activeGrimoireEntry.kind === "envie" && isChef ? (
+                                <button type="button" onClick={() => updateGrimoireStatus(activeGrimoireEntry.id, "en_cours")}>
+                                  👨‍🍳 Je m’en occupe
+                                </button>
+                              ) : null}
+                              <button type="button" onClick={() => setPourToiReply("😍 Je veux ça")}>
+                                😍 Je veux ça
+                              </button>
+                              <button type="button" onClick={() => setPourToiReply("🤨 Convaincs-moi")}>
+                                🤨 Convaincs-moi
+                              </button>
+                              <button type="button" onClick={() => setPourToiReply("❤️ Pour moi ?")}>
+                                ❤️ Pour moi ?
+                              </button>
+                              <button type="button" onClick={() => setPourToiReply("😈 Recommence, Chef")}>
+                                😈 Recommence, Chef
+                              </button>
+                            </div>
+                            <label className="book-reply">
+                              {activeGrimoireEntry.kind === "envie" && isChef ? "Le Chef a décidé..." : "Répondre"}
+                              <textarea
+                                value={pourToiReply}
+                                onChange={(event) => setPourToiReply(event.target.value)}
+                                placeholder={
+                                  activeGrimoireEntry.kind === "envie" && isChef
+                                    ? "Fondant au chocolat noir, cœur pistache..."
+                                    : "Une réponse brève..."
+                                }
+                              />
+                            </label>
+                            <div className="book-actions">
+                              <button type="button" onClick={() => updatePourToiReply(activeGrimoireEntry.id, pourToiReply)}>
+                                Glisser la réponse
+                              </button>
+                              <button type="button" onClick={() => updateGrimoireStatus(activeGrimoireEntry.id, "servi")}>
+                                🍽️ Servi
+                              </button>
+                              {isChef ? (
+                                <button type="button" onClick={() => addPourToiToChefRecipes(activeGrimoireEntry)}>
+                                  Ajouter aux Recettes du Chef
+                                </button>
+                              ) : null}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="quiet-book-note">Cette page attend l’autre personne.</p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <span>Page ouverte</span>
+                        <h2>Préparation</h2>
+                        <p>{activeGrimoireEntry.preparation}</p>
+                        <h3>Techniques</h3>
+                        <ul>
+                          {lines(activeGrimoireEntry.techniques).map((technique) => (
+                            <li key={technique}>{technique}</li>
+                          ))}
+                        </ul>
+                        {activeGrimoireEntry.notes ? (
+                          <>
+                            <h3>Notes</h3>
+                            <p>{activeGrimoireEntry.notes}</p>
+                          </>
+                        ) : null}
+                        {activeGrimoireEntry.next ? (
+                          <>
+                            <h3>À modifier la prochaine fois</h3>
+                            <p>{activeGrimoireEntry.next}</p>
+                          </>
+                        ) : null}
+                      </>
+                    )
+                  ) : (
+                    <p>Choisis une page ou écris-en une nouvelle.</p>
+                  )}
+                </article>
+              </div>
+            )}
+
+            {grimoireSection !== "index" && !grimoireDraftOpen ? (
+              <button
+                className="new-page-button"
+                type="button"
+                onClick={() => {
+                  setGrimoireDraft(createEmptyGrimoireDraft(grimoireSection));
+                  setGrimoireDraftOpen(true);
+                }}
+              >
+                Nouvelle page
+              </button>
+            ) : null}
+          </section>
+        ) : null}
+
+        {place === "caisse" ? (
+          <section className="caisse-drawer" aria-label="La Caisse">
+            <header>
+              <span>Caisse ouverte</span>
+              <button type="button" onClick={() => setPlace("cuisine")}>
+                Fermer
+              </button>
+            </header>
+            <div className="wallets">
+              <strong>Chef <small>🪙 {wallets.chef}</small></strong>
+              <strong>Serveuse <small>🪙 {wallets.serveuse}</small></strong>
+            </div>
+            <nav className="caisse-tabs" aria-label="Actions de caisse">
+              <button type="button" className={caisseMode === "tip" ? "active" : ""} onClick={() => setCaisseMode("tip")}>
+                Pourboire
+              </button>
+              <button type="button" className={caisseMode === "shop" ? "active" : ""} onClick={() => setCaisseMode("shop")}>
+                Boutique
+              </button>
+              <button type="button" onClick={() => setHistoryOpen((current) => !current)}>
+                Historique
+              </button>
+            </nav>
+
+            {caisseMode === "overview" ? (
+              <p className="caisse-note">Chaque solde reste personnel. La cuisine, elle, appartient aux deux.</p>
+            ) : null}
+
+            {caisseMode === "tip" ? (
+              <div className="receipt-form">
+                <label>
+                  À
+                  <select value={tipTo} onChange={(event) => setTipTo(event.target.value as UserRole)}>
+                    <option value="chef">Chef</option>
+                    <option value="serveuse">Serveuse</option>
+                  </select>
+                </label>
+                <label>
+                  Montant
+                  <input type="number" min={1} max={wallets[role]} value={tipAmount} onChange={(event) => setTipAmount(Number(event.target.value))} />
+                </label>
+                <textarea value={tipMessage} onChange={(event) => setTipMessage(event.target.value)} placeholder="Mot sur le reçu..." />
+                <button type="button" onClick={sendTip}>
+                  Donner un pourboire
+                </button>
+              </div>
+            ) : null}
+
+            {caisseMode === "shop" ? (
+              <div className="shop-list">
+                {boutiqueItems.map((item) => {
+                  const owned = sharedItems.some((ownedItem) => ownedItem.id === item.id);
+                  return (
+                    <button key={item.id} type="button" disabled={owned || wallets[role] < item.cost} onClick={() => buyKitchenItem(item)}>
+                      {item.name}
+                      <small>{owned ? "installé" : `${item.cost} 🪙`}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {historyOpen ? (
+              <div className="receipt-history">
+                {caisseEntries.length > 0 ? (
+                  caisseEntries.slice(0, 8).map((entry) => (
+                    <article key={entry.id}>
+                      <time>{eventTime(entry.date)}</time>
+                      <b>{roleLabels[entry.from]}</b>
+                      <span>{entry.item ?? entry.type}</span>
+                      <small>-{entry.amount} 🪙 {entry.message}</small>
+                    </article>
+                  ))
+                ) : (
+                  <p>Aucun mouvement pour l’instant.</p>
+                )}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {place === "pause" ? <p className="pause-whisper">La Pause</p> : null}
+
+        {draftPlacement ? (
+          <section className={draftPlacement.type === "lettre" ? "paper-modal letter-paper writing-paper context-paper" : "paper-modal small-paper context-paper"} style={draftCss ?? undefined} aria-label="Poser un objet">
+            <span>{itemMeta[draftPlacement.type].label}</span>
+            <h2>{draftPlacement.type === "lettre" ? "Écrire une lettre" : "Laisser quelque chose ici"}</h2>
+            <label className="paper-object-select">
+              Qu’est-ce que tu caches ?
+              <select
+                value={draftPlacement.type}
+                onChange={(event) =>
+                  setDraftPlacement((current) =>
+                    current ? { ...current, type: event.target.value as PlacedItemType } : current,
+                  )
+                }
+              >
+                {draftItemTypes.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <textarea
+              value={draftMessage}
+              onChange={(event) => setDraftMessage(event.target.value)}
+              placeholder={draftPlacement.type === "lettre" ? "À cacher exactement ici..." : "Un petit mot, si tu veux..."}
+            />
+            <div className="modal-actions">
+              <button type="button" onClick={cancelPlacement}>
+                Annuler
+              </button>
+              <button type="button" onClick={placeDraftItem}>
+                {draftPlacement.type === "lettre" ? "Cacher la lettre" : "Poser ici"}
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {activeItem ? (
+          <section className={activeItem.type === "lettre" ? "paper-modal letter-paper read-letter" : "paper-modal tiny-paper"} aria-label="Objet trouvé">
+            <span>{itemMeta[activeItem.type].label}</span>
+            <h2>{itemMeta[activeItem.type].mark} Trouvé</h2>
+            <p>{activeItem.message || `${roleLabels[activeItem.authorId]} a laissé quelque chose ici.`}</p>
+            <small>
+              {roleLabels[activeItem.authorId]} · {eventTime(activeItem.createdAt)}
+            </small>
+            <div className="modal-actions">
+              <button type="button" onClick={() => setActiveItemId(null)}>
+                Fermer
+              </button>
+              <button type="button" onClick={() => collectItem(activeItem.id)}>
+                Ramasser
+              </button>
+            </div>
+          </section>
+        ) : null}
+
+        {distractionOpen ? (
+          <section className="paper-modal tiny-paper" aria-label="Distraire le Chef">
+            <span>Distraire le Chef</span>
+            <h2>Comment veux-tu le distraire ?</h2>
+            <textarea value={distractionText} onChange={(event) => setDistractionText(event.target.value)} placeholder="Je viens t’embrasser pendant que tu dresses les assiettes." />
+            <label className="private-photo-field">
+              Photo ou vidéo privée
+              <input
+                ref={captureInputRef}
+                className="hidden-file-input"
+                type="file"
+                accept="image/*,video/*"
+                capture
+                onChange={(event) => setDistractionFile(event.target.files?.[0] ?? null)}
+              />
+              <input
+                ref={galleryInputRef}
+                className="hidden-file-input"
+                type="file"
+                accept="image/*,video/*"
+                onChange={(event) => setDistractionFile(event.target.files?.[0] ?? null)}
+              />
+              <div className="camera-actions">
+                <button type="button" onClick={() => captureInputRef.current?.click()}>
+                  Caméra
+                </button>
+                <button type="button" onClick={() => galleryInputRef.current?.click()}>
+                  Galerie / fichier
+                </button>
+              </div>
+              <small>{distractionFile ? distractionFile.name : "Tu peux prendre une photo, enregistrer une courte vidéo ou choisir un fichier."}</small>
+            </label>
+            <label className="private-photo-field">
+              Disparaît après
+              <select value={distractionDurationHours} onChange={(event) => setDistractionDurationHours(Number(event.target.value))}>
+                <option value={0.25}>15 minutes</option>
+                <option value={1}>1 heure</option>
+                <option value={6}>6 heures</option>
+                <option value={12}>12 heures</option>
+                <option value={24}>24 heures</option>
+              </select>
+            </label>
+            <div className="modal-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  setDistractionOpen(false);
+                }}
+              >
+                Fermer
+              </button>
+              <button type="button" onClick={submitDistraction} disabled={distractionBusy || (!distractionText.trim() && !distractionFile)}>
+                {distractionBusy ? "..." : "Cacher pour le Chef"}
+              </button>
+            </div>
+            {authError ? <p className="staff-error">{authError}</p> : null}
+          </section>
+        ) : null}
+      </section>
+    </main>
   );
 }

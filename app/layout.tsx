@@ -21,7 +21,7 @@ const cormorant = Cormorant_Garamond({
 export const metadata: Metadata = {
   title: "Le Grimoire",
   description:
-    "Un restaurante privado para dos: recetario, cocina creativa, clientes ficticios, cartas y propinas imaginarias.",
+    "Una cocina privada para dos personas: presencia, recetas, notas y pequeñas travesuras.",
   applicationName: "Le Grimoire",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -31,8 +31,8 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: "Le Grimoire",
-    description: "Un pequeño universo culinario compartido.",
-    images: ["/images/le-grimoire-kitchen.png"],
+    description: "Un pequeño lugar compartido que existe únicamente para dos personas.",
+    images: ["/scenes/cuisine-main.png"],
   },
   icons: {
     icon: "/favicon.svg",

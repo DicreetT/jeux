@@ -29,12 +29,13 @@ test("server-renders Le Grimoire", async () => {
 
   const html = await response.text();
   assert.match(html, /<title>Le Grimoire<\/title>/i);
-  assert.match(html, /Libro de reservas/i);
+  assert.match(html, /Le Chef/i);
+  assert.match(html, /Serveuse/i);
+  assert.match(html, /Dernier passage/i);
   assert.match(html, /Le Grimoire/i);
-  assert.match(html, /Voir la commande/i);
-  assert.match(html, /La Caisse/i);
-  assert.match(html, /Les Lettres/i);
-  assert.doesNotMatch(html, /Abrir recetas/i);
+  assert.match(html, /Caisse/i);
+  assert.match(html, /Sortie/i);
+  assert.doesNotMatch(html, /Abrir recetas|Voir la commande|Libro de reservas/i);
   assert.doesNotMatch(html, /Nos Plats|Menu|Le Comptoir|Entrar por las puertas dobles/i);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });

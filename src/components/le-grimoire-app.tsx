@@ -1463,7 +1463,7 @@ export function LeGrimoireApp() {
           <button
             key={hotspot.id}
             type="button"
-            className={`scene-hotspot ${hotspot.state ?? "quiet"} ${touchedHotspotId === hotspot.id ? "touched" : ""}`}
+            className={`scene-hotspot hotspot-${hotspot.id} ${hotspot.state ?? "quiet"} ${touchedHotspotId === hotspot.id ? "touched" : ""}`}
             style={{
               ...imagePointToCssPoint(hotspot, sceneSize),
               width: `${hotspot.widthPercent}%`,

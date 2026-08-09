@@ -350,6 +350,48 @@ button:disabled {
   border-color: rgba(255, 232, 181, 0.16);
 }
 
+@media (hover: none), (pointer: coarse) {
+  .scene-hotspot.object::after,
+  .scene-hotspot.secret::after,
+  .scene-hotspot.hotspot-exit::after,
+  .scene-hotspot.hotspot-pause-door::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 0.62rem;
+    height: 0.62rem;
+    transform: translate(-50%, -50%);
+    border: 1px solid rgba(255, 241, 207, 0.82);
+    border-radius: 999px;
+    background: rgba(255, 232, 181, 0.72);
+    box-shadow:
+      0 0 0 0.35rem rgba(255, 232, 181, 0.06),
+      0 0 1.15rem rgba(255, 198, 96, 0.38);
+    opacity: 0.62;
+    pointer-events: none;
+  }
+
+  .scene-hotspot.exit::after {
+    background: rgba(255, 185, 85, 0.9);
+    box-shadow:
+      0 0 0 0.4rem rgba(255, 184, 77, 0.08),
+      0 0 1.45rem rgba(255, 161, 57, 0.55);
+    opacity: 0.88;
+  }
+
+  .scene-hotspot.secret::after {
+    opacity: 0.42;
+  }
+
+  .scene-hotspot:hover::after,
+  .scene-hotspot:focus-visible::after,
+  .scene-hotspot:active::after,
+  .scene-hotspot.touched::after {
+    opacity: 0.95;
+  }
+}
+
 .service-board,
 .serveuse-tag {
   z-index: 4;
@@ -1463,44 +1505,6 @@ button:disabled {
   .scene-hotspot {
     min-width: 2.8rem;
     min-height: 2.8rem;
-  }
-
-  .scene-hotspot.object::after,
-  .scene-hotspot.exit::after,
-  .scene-hotspot.secret::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    width: 0.62rem;
-    height: 0.62rem;
-    transform: translate(-50%, -50%);
-    border: 1px solid rgba(255, 241, 207, 0.82);
-    border-radius: 999px;
-    background: rgba(255, 232, 181, 0.72);
-    box-shadow:
-      0 0 0 0.35rem rgba(255, 232, 181, 0.06),
-      0 0 1.15rem rgba(255, 198, 96, 0.38);
-    opacity: 0.62;
-    pointer-events: none;
-  }
-
-  .scene-hotspot.exit::after {
-    background: rgba(255, 185, 85, 0.9);
-    box-shadow:
-      0 0 0 0.4rem rgba(255, 184, 77, 0.08),
-      0 0 1.45rem rgba(255, 161, 57, 0.55);
-  }
-
-  .scene-hotspot.secret::after {
-    opacity: 0.42;
-  }
-
-  .scene-hotspot:hover::after,
-  .scene-hotspot:focus-visible::after,
-  .scene-hotspot:active::after,
-  .scene-hotspot.touched::after {
-    opacity: 0.95;
   }
 
   .scene-hotspot span {

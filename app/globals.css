@@ -597,9 +597,9 @@ button:disabled {
   right: auto;
   top: auto;
   bottom: 0.8rem;
-  width: min(12rem, calc(100vw - 1.6rem));
-  max-height: 30vh;
-  overflow-y: auto;
+  width: min(8.2rem, calc(100vw - 1.6rem));
+  max-height: 5.6rem;
+  overflow: visible;
   transform: rotate(-1deg);
   border: 1px solid rgba(88, 57, 35, 0.28);
   border-radius: 4px;
@@ -615,6 +615,11 @@ button:disabled {
 .passage-ticket.open {
   width: min(17rem, calc(100vw - 1.6rem));
   max-height: 44vh;
+  overflow-y: auto;
+}
+
+.passage-ticket.empty {
+  width: min(6.8rem, calc(100vw - 1.6rem));
 }
 
 .passage-ticket::before {
@@ -641,6 +646,10 @@ button:disabled {
   text-align: left;
 }
 
+.ticket-summary span {
+  margin-bottom: 0.1rem;
+}
+
 .passage-ticket strong {
   display: block;
   margin-top: 0.18rem;
@@ -648,6 +657,14 @@ button:disabled {
   font-family: var(--font-display), Georgia, serif;
   font-size: 0.86rem;
   line-height: 1.05;
+}
+
+.passage-ticket:not(.open) strong {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .passage-ticket time {
@@ -1681,12 +1698,13 @@ button:disabled {
     right: auto;
     top: auto;
     bottom: 0.6rem;
-    width: min(11.5rem, calc(100vw - 1.2rem));
-    max-height: 23vh;
+    width: min(7.4rem, calc(100vw - 1.2rem));
+    max-height: 5.2rem;
   }
 
   .passage-ticket.open {
     width: min(16rem, calc(100vw - 1.2rem));
+    max-height: 23vh;
   }
 
   .action-drawer.open {
@@ -1958,7 +1976,12 @@ button:disabled {
   .passage-ticket {
     left: 0.55rem;
     bottom: 0.45rem;
-    width: 10.5rem;
+    width: 7.2rem;
+    max-height: 5.2rem;
+  }
+
+  .passage-ticket.open {
+    width: min(15.5rem, calc(100vw - 1.1rem));
     max-height: 20svh;
   }
 

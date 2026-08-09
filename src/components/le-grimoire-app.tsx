@@ -1579,36 +1579,39 @@ export function LeGrimoireApp() {
 
         {(place === "cuisine" || place === "pause") && (
           <>
-            <aside className={passageOpen ? "passage-ticket open" : "passage-ticket"}>
-              <span>Dernier passage</span>
-              {newestEvent ? (
-                <>
-                  <button className="ticket-summary" type="button" onClick={() => setPassageOpen((current) => !current)}>
+            <aside className={`${passageOpen ? "passage-ticket open" : "passage-ticket"} ${newestEvent ? "has-event" : "empty"}`}>
+              <button className="ticket-summary" type="button" onClick={() => setPassageOpen((current) => !current)}>
+                <span>Dernier passage</span>
+                {newestEvent ? (
+                  <>
                     <strong>{newestEvent.title}</strong>
                     <time>{eventTime(newestEvent.date)}</time>
-                  </button>
-                  {passageOpen ? (
-                    <>
-                      <p>{newestEvent.message}</p>
-                      <EventPrivateMedia event={newestEvent} />
-                      {isChef ? (
-                        <div className="tiny-actions">
-                          {chefResponses.map((response) => (
-                            <button key={response.title} type="button" onClick={() => addEvent("chef", response.title, response.message, "serveuse")}>
-                              {response.title}
-                            </button>
-                          ))}
-                        </div>
-                      ) : null}
-                      <button className="vu-button" type="button" onClick={() => setSeenEventIds((current) => (current.includes(newestEvent.id) ? current : [...current, newestEvent.id]))}>
-                        {newestEventSeen ? "VU ✓" : "Marquer VU"}
-                      </button>
-                    </>
+                  </>
+                ) : (
+                  <strong>Rien</strong>
+                )}
+              </button>
+              {newestEvent && passageOpen ? (
+                <>
+                  <p>{newestEvent.message}</p>
+                  <EventPrivateMedia event={newestEvent} />
+                  {isChef ? (
+                    <div className="tiny-actions">
+                      {chefResponses.map((response) => (
+                        <button key={response.title} type="button" onClick={() => addEvent("chef", response.title, response.message, "serveuse")}>
+                          {response.title}
+                        </button>
+                      ))}
+                    </div>
                   ) : null}
+                  <button className="vu-button" type="button" onClick={() => setSeenEventIds((current) => (current.includes(newestEvent.id) ? current : [...current, newestEvent.id]))}>
+                    {newestEventSeen ? "VU ✓" : "Marquer VU"}
+                  </button>
                 </>
-              ) : (
+              ) : null}
+              {!newestEvent && passageOpen ? (
                 <p>Rien pour toi pour l’instant.</p>
-              )}
+              ) : null}
             </aside>
 
             <aside className={drawerOpen ? "action-drawer open" : "action-drawer"} aria-label="Actions">

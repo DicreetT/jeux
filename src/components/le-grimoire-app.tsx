@@ -393,6 +393,12 @@ function readStored<T>(key: string, fallback: T): T {
 function useSharedState<T>(key: string, fallback: T) {
   const [value, setValue] = useState<T>(fallback);
   const [ready, setReady] = useState(false);
+  const valueRef = useRef(value);
+  const skipNextSaveRef = useRef(false);
+
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   useEffect(() => {
     let cancelled = false;
@@ -415,9 +421,49 @@ function useSharedState<T>(key: string, fallback: T) {
 
   useEffect(() => {
     if (!ready) return;
-    window.localStorage.setItem(key, JSON.stringify(value));
+    const serialized = JSON.stringify(value);
+    window.localStorage.setItem(key, serialized);
+    if (skipNextSaveRef.current) {
+      skipNextSaveRef.current = false;
+      return;
+    }
     void saveSharedState(key, value);
   }, [key, ready, value]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+
+    const channel = client
+      .channel(`le-grimoire-state:${key}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "le_grimoire_state",
+          filter: `key=eq.${key}`,
+        },
+        (payload) => {
+          const row = payload.new as { value?: T } | null;
+          if (!row || !("value" in row)) return;
+
+          const nextValue = row.value as T;
+          const nextSerialized = JSON.stringify(nextValue);
+          if (nextSerialized === JSON.stringify(valueRef.current)) return;
+
+          skipNextSaveRef.current = true;
+          valueRef.current = nextValue;
+          window.localStorage.setItem(key, nextSerialized);
+          setValue(nextValue);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void client.removeChannel(channel);
+    };
+  }, [key]);
 
   return [value, setValue] as const;
 }

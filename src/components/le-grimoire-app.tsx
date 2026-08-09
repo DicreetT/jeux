@@ -1420,6 +1420,10 @@ export function LeGrimoireApp() {
 
   return (
     <main className="private-kitchen">
+      <aside className="rotate-phone-note" aria-label="Consejo para móvil">
+        <span>Tourne ton téléphone</span>
+        <p>La Cuisine se ve mejor en horizontal. Puedes deslizar la escena si sigues en vertical.</p>
+      </aside>
       <section
         ref={sceneRef}
         className={place === "pause" ? "world-scene pause-scene" : "world-scene kitchen-scene"}

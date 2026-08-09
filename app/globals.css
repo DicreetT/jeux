@@ -12,6 +12,7 @@
   --gold: #d0ad61;
   --night: #102134;
   --shadow: rgba(0, 0, 0, 0.52);
+  --scene-aspect: 1.7778958555;
 }
 
 @theme inline {
@@ -57,6 +58,10 @@ button:disabled {
   background:
     radial-gradient(circle at 50% -8%, rgba(180, 107, 60, 0.26), transparent 33rem),
     linear-gradient(145deg, #120d09, #24140d 48%, #0c1c22);
+}
+
+.rotate-phone-note {
+  display: none;
 }
 
 .staff-door {
@@ -1431,6 +1436,12 @@ button:disabled {
 }
 
 @media (max-width: 760px) {
+  .private-kitchen {
+    min-height: 100svh;
+    overflow: auto;
+    overscroll-behavior: none;
+  }
+
   .world-scene {
     min-height: 100svh;
   }
@@ -1461,7 +1472,7 @@ button:disabled {
     left: 0.6rem;
     right: auto;
     top: auto;
-    bottom: 6.6rem;
+    bottom: 5.8rem;
     width: min(11rem, calc(100vw - 1.2rem));
   }
 
@@ -1469,7 +1480,7 @@ button:disabled {
     left: 0.6rem;
     right: auto;
     top: auto;
-    bottom: 12.7rem;
+    bottom: 11.5rem;
     width: min(11rem, calc(100vw - 1.2rem));
   }
 
@@ -1515,6 +1526,15 @@ button:disabled {
 
   .paper-modal {
     width: calc(100vw - 1rem);
+    max-height: min(78svh, 38rem);
+  }
+
+  .paper-modal h2 {
+    font-size: clamp(1.8rem, 11vw, 2.55rem);
+  }
+
+  .paper-modal textarea {
+    min-height: 5.5rem;
   }
 
   .grimoire-book {
@@ -1586,5 +1606,154 @@ button:disabled {
 
   .book-page h2 {
     font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 760px) and (orientation: portrait) {
+  .private-kitchen {
+    display: block;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .rotate-phone-note {
+    position: fixed;
+    left: 0.65rem;
+    right: 0.65rem;
+    top: max(0.6rem, env(safe-area-inset-top));
+    z-index: 30;
+    display: grid;
+    gap: 0.1rem;
+    border: 1px solid rgba(255, 232, 181, 0.18);
+    border-radius: 8px;
+    background: rgba(13, 8, 5, 0.74);
+    color: #fff1cf;
+    padding: 0.55rem 0.7rem;
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+    backdrop-filter: blur(12px);
+    pointer-events: none;
+  }
+
+  .rotate-phone-note span {
+    color: #d0ad61;
+    font-size: 0.7rem;
+    font-weight: 950;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .rotate-phone-note p {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.25;
+  }
+
+  .world-scene {
+    width: max(100vw, calc(100svh * var(--scene-aspect, 1.777)));
+    min-width: max(100vw, calc(100svh * var(--scene-aspect, 1.777)));
+    height: 100svh;
+    min-height: 100svh;
+    scroll-snap-align: start;
+  }
+
+  .scene-image,
+  .kitchen-scene,
+  .pause-scene,
+  .pause-scene .scene-image {
+    object-fit: cover;
+    object-position: center;
+    background-position: center;
+  }
+
+  .role-pin {
+    top: calc(max(0.6rem, env(safe-area-inset-top)) + 4.35rem);
+  }
+
+  .return-cuisine {
+    top: calc(max(0.6rem, env(safe-area-inset-top)) + 7rem);
+  }
+
+  .scene-hotspot {
+    min-width: 3rem;
+    min-height: 3rem;
+  }
+
+  .service-board,
+  .serveuse-tag {
+    width: 8.9rem;
+    padding: 0.38rem;
+  }
+
+  .service-board strong,
+  .serveuse-tag strong {
+    font-size: 0.9rem;
+  }
+
+  .service-board button,
+  .serveuse-tag button {
+    min-height: 1.4rem;
+    font-size: 0.61rem;
+  }
+
+  .service-board {
+    left: 0.55rem;
+    bottom: 5rem;
+  }
+
+  .serveuse-tag {
+    left: 0.55rem;
+    bottom: 10.35rem;
+  }
+
+  .passage-ticket {
+    left: 0.55rem;
+    bottom: 0.45rem;
+    width: 10.5rem;
+    max-height: 20svh;
+  }
+
+  .action-drawer {
+    position: fixed;
+    right: 0;
+    z-index: 24;
+  }
+
+  .action-drawer.open {
+    right: 0.5rem;
+  }
+
+  .placement-hint,
+  .paper-modal,
+  .caisse-drawer,
+  .grimoire-book,
+  .book-placeholder {
+    position: fixed;
+    z-index: 25;
+  }
+
+  .context-paper,
+  .paper-modal.context-paper {
+    left: 0.55rem !important;
+    right: 0.55rem !important;
+    top: auto !important;
+    bottom: max(0.7rem, env(safe-area-inset-bottom)) !important;
+    width: auto;
+    max-width: calc(100vw - 1.1rem);
+    max-height: 60svh;
+    transform: none !important;
+  }
+
+  .paper-modal h2 {
+    font-size: clamp(1.75rem, 10vw, 2.45rem);
+  }
+
+  .letter-paper {
+    min-height: auto;
+  }
+
+  .modal-actions {
+    justify-content: flex-start;
   }
 }

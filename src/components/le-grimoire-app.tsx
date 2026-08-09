@@ -55,6 +55,8 @@ type KitchenEvent = {
   mediaType?: string;
 };
 
+type PrivateMediaPayload = Pick<KitchenEvent, "mediaPath" | "mediaExpiresAt" | "mediaType">;
+
 type PrivateProfile = {
   id: string;
   role: ProfileRole;
@@ -72,6 +74,9 @@ type ScenePlacedItem = {
   message: string;
   createdAt: string;
   collectedAt?: string;
+  mediaPath?: string;
+  mediaExpiresAt?: string;
+  mediaType?: string;
 };
 
 type Wallets = Record<UserRole, number>;
@@ -265,44 +270,7 @@ const grimoireSections: Array<{ id: GrimoireSection; label: string; description:
   { id: "pour_toi", label: "Pour toi ❤️", description: "Ce qu’on cuisine l’un pour l’autre." },
 ];
 
-const initialGrimoireEntries: GrimoireEntry[] = [
-  {
-    id: "recipe-aubergine",
-    section: "chef",
-    kind: "recipe",
-    title: "Aubergines rôties, chermoula douce",
-    from: "chef",
-    date: "2026-08-09T00:00:00.000Z",
-    ingredients: "Berenjena\nChermoula\nYogur si procede\nGranada\nHierbas frescas",
-    quantities: "2 berenjenas\n3 c. de chermoula\n1 puñado de granada",
-    time: "45 min",
-    temperatures: "Horno 210 °C",
-    preparation: "Asar las berenjenas abiertas hasta que la pulpa ceda. Lacar con chermoula al final para no quemar las especias. Terminar con hierbas y granada.",
-    techniques: "Asar\nLacar\nReposar",
-    notes: "Debe quedar profundo, no pesado. La salsa manda, pero no grita.",
-    next: "Probar con limón confitado picado muy fino.",
-    portions: "2 portions",
-    dressage: "Pulpe nacrée, grenade en pluie fine, herbes au dernier moment.",
-  },
-  {
-    id: "recipe-grenade",
-    section: "chef",
-    kind: "recipe",
-    title: "Réduction grenade et poivre long",
-    from: "chef",
-    date: "2026-08-09T00:00:00.000Z",
-    ingredients: "Jus de grenade\nFond brun\nPoivre long\nVinaigre doux",
-    quantities: "250 ml jus\n120 ml fond\n1 pointe de vinaigre",
-    time: "25 min",
-    temperatures: "Frémissement doux",
-    preparation: "Réduire lentement le jus de grenade avec le fond. Monter la brillance hors feu. Corriger l'acidité juste avant service.",
-    techniques: "Réduire\nLier\nRectifier",
-    notes: "Va très bien avec cordero, pato o légumes rôtis.",
-    next: "Tester une version plus sèche pour dressage fin.",
-    portions: "Base sauce",
-    dressage: "Utiliser en points brillants ou nappage très fin.",
-  },
-];
+const initialGrimoireEntries: GrimoireEntry[] = [];
 
 const initialEvents: KitchenEvent[] = [];
 
@@ -582,7 +550,7 @@ function PrivateDoor(props: {
   );
 }
 
-function EventPrivateMedia({ event }: { event: KitchenEvent }) {
+function EventPrivateMedia({ event }: { event: PrivateMediaPayload }) {
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -714,6 +682,10 @@ function isSeededPourToiEntry(entry: GrimoireEntry) {
   return entry.id === "pour-toi-pistache" || entry.id === "ferais-entrecote";
 }
 
+function isSeededChefRecipe(entry: GrimoireEntry) {
+  return entry.id === "recipe-aubergine" || entry.id === "recipe-grenade";
+}
+
 export function LeGrimoireApp() {
   const sceneRef = useRef<HTMLElement | null>(null);
   const captureInputRef = useRef<HTMLInputElement | null>(null);
@@ -750,6 +722,8 @@ export function LeGrimoireApp() {
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [passageOpen, setPassageOpen] = useState(false);
   const [distractionOpen, setDistractionOpen] = useState(false);
+  const [placingDistraction, setPlacingDistraction] = useState(false);
+  const [distractionPlacement, setDistractionPlacement] = useState<(ImagePoint & { scene: SceneName }) | null>(null);
   const [distractionText, setDistractionText] = useState("");
   const [distractionFile, setDistractionFile] = useState<File | null>(null);
   const [distractionDurationHours, setDistractionDurationHours] = useState(12);
@@ -851,7 +825,7 @@ export function LeGrimoireApp() {
 
   useEffect(() => {
     setGrimoireEntries((current) => {
-      const filtered = current.filter((entry) => !isSeededPourToiEntry(entry));
+      const filtered = current.filter((entry) => !isSeededPourToiEntry(entry) && !isSeededChefRecipe(entry));
       return filtered.length === current.length ? current : filtered;
     });
   }, [setGrimoireEntries]);
@@ -954,8 +928,21 @@ export function LeGrimoireApp() {
 
   function beginPlacement(type: PlacedItemType) {
     setPlacingType(type);
+    setPlacingDistraction(false);
     setDraftPlacement(null);
     setDraftMessage("");
+    setDrawerOpen(false);
+    setObjectTrayOpen(false);
+  }
+
+  function beginDistractionPlacement() {
+    if (activeScene !== "cuisine") return;
+    setPlacingType("tough_love");
+    setPlacingDistraction(true);
+    setDraftPlacement(null);
+    setDraftMessage("");
+    setDistractionPlacement(null);
+    setDistractionOpen(false);
     setDrawerOpen(false);
     setObjectTrayOpen(false);
   }
@@ -971,6 +958,15 @@ export function LeGrimoireApp() {
     if (target.closest("button, textarea, input, select, .paper-modal, .action-drawer, .caisse-drawer")) return;
 
     const point = scenePointerToImagePoint(event, sceneRef.current.getBoundingClientRect());
+    if (placingDistraction) {
+      setDistractionPlacement({ ...point, scene: activeScene });
+      setPreviewPoint(point);
+      setPlacingType(null);
+      setPlacingDistraction(false);
+      setDistractionOpen(true);
+      return;
+    }
+
     setDraftPlacement({ ...point, scene: activeScene, type: placingType });
     setPreviewPoint(point);
     setPlacingType(null);
@@ -979,7 +975,9 @@ export function LeGrimoireApp() {
   function cancelPlacement() {
     setPlacingType(null);
     setDraftPlacement(null);
+    setDistractionPlacement(null);
     setPreviewPoint(null);
+    setPlacingDistraction(false);
     setDraftMessage("");
   }
 
@@ -1012,7 +1010,7 @@ export function LeGrimoireApp() {
     setActiveItemId(null);
   }
 
-  async function uploadPrivateMedia(file: File, expiresAt: string) {
+  async function uploadPrivateMedia(file: File, expiresAt: string, scene: SceneName, message: string) {
     if (!supabase || !session) {
       throw new Error("Supabase Auth est nécessaire pour envoyer une photo privée.");
     }
@@ -1046,9 +1044,9 @@ export function LeGrimoireApp() {
       sender_id: session.user.id,
       recipient_role: userRoleToProfileRole(otherRole(role)),
       storage_path: path,
-      scene: activeScene,
+      scene,
       kind: isImage ? "image" : "video",
-      message: distractionText.trim(),
+      message,
       expires_at: expiresAt,
     });
 
@@ -1059,21 +1057,39 @@ export function LeGrimoireApp() {
 
   async function submitDistraction() {
     const message = distractionText.trim();
-    if (!message && !distractionFile) return;
+    if ((!message && !distractionFile) || !distractionPlacement) return;
 
     setDistractionBusy(true);
     try {
       const expiresAt = expirationFromDuration(distractionDurationHours);
-      const media = distractionFile ? await uploadPrivateMedia(distractionFile, expiresAt) : undefined;
+      const media = distractionFile ? await uploadPrivateMedia(distractionFile, expiresAt, distractionPlacement.scene, message) : undefined;
+      setPlacedItems((current) => [
+        {
+          id: `distraction-${Date.now()}`,
+          scene: distractionPlacement.scene,
+          xPercent: distractionPlacement.xPercent,
+          yPercent: distractionPlacement.yPercent,
+          type: "tough_love",
+          authorId: "serveuse",
+          recipientId: "chef",
+          message,
+          createdAt: nowIso(),
+          mediaPath: media?.path,
+          mediaExpiresAt: distractionFile ? expiresAt : undefined,
+          mediaType: media?.contentType,
+        },
+        ...current,
+      ]);
       addEvent(
         "serveuse",
-        "💋 Serveuse est passée.",
-        message || "Elle a laissé une distraction privée.",
+        "😈 La Serveuse est passée.",
+        "Une distraction attend quelque part dans la cuisine.",
         "chef",
-        media ? { mediaPath: media.path, mediaExpiresAt: expiresAt, mediaType: media.contentType } : undefined,
       );
       setDistractionText("");
       setDistractionFile(null);
+      setDistractionPlacement(null);
+      setPreviewPoint(null);
       setDistractionOpen(false);
       setDrawerOpen(false);
     } catch (error) {
@@ -1396,6 +1412,7 @@ export function LeGrimoireApp() {
   const visibleItems = placedItems.filter((item) => item.scene === activeScene && !item.collectedAt);
   const previewCss = previewPoint ? imagePointToCssPoint(previewPoint, sceneSize) : null;
   const draftCss = draftPlacement ? contextPaperStyle(draftPlacement, sceneSize) : null;
+  const distractionCss = distractionPlacement ? contextPaperStyle(distractionPlacement, sceneSize) : null;
   const currentGrimoireEntries =
     grimoireSection === "index"
       ? []
@@ -1582,26 +1599,8 @@ export function LeGrimoireApp() {
                     </div>
                   ) : null}
                   {!isChef && activeScene === "cuisine" ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        addEvent("serveuse", "🔥 La Serveuse est passée.", "Quelque chose dans la cuisine paraît légèrement suspect.", "chef");
-                        setDrawerOpen(false);
-                      }}
-                    >
-                      🔥 Petite bêtise
-                    </button>
-                  ) : null}
-                  {!isChef && activeScene === "cuisine" ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDistractionOpen(true);
-                        setDrawerOpen(false);
-                        setObjectTrayOpen(false);
-                      }}
-                    >
-                      💋 Distraire
+                    <button type="button" onClick={beginDistractionPlacement}>
+                      😈 Distraire
                     </button>
                   ) : null}
                   <button
@@ -1622,7 +1621,7 @@ export function LeGrimoireApp() {
             {placingType ? (
               <div className="placement-hint">
                 <b>{itemMeta[placingType].mark}</b>
-                Choisis un endroit.
+                {placingDistraction ? "Choisis où cacher la distraction." : "Choisis un endroit."}
                 <button type="button" onClick={cancelPlacement}>
                   Annuler
                 </button>
@@ -2256,6 +2255,7 @@ export function LeGrimoireApp() {
             <span>{itemMeta[activeItem.type].label}</span>
             <h2>{itemMeta[activeItem.type].mark} Trouvé</h2>
             <p>{activeItem.message || `${roleLabels[activeItem.authorId]} a laissé quelque chose ici.`}</p>
+            <EventPrivateMedia event={activeItem} />
             <small>
               {roleLabels[activeItem.authorId]} · {eventTime(activeItem.createdAt)}
             </small>
@@ -2271,8 +2271,8 @@ export function LeGrimoireApp() {
         ) : null}
 
         {distractionOpen ? (
-          <section className="paper-modal tiny-paper" aria-label="Distraire le Chef">
-            <span>Distraire le Chef</span>
+          <section className="paper-modal tiny-paper context-paper" style={distractionCss ?? undefined} aria-label="Distraire le Chef">
+            <span>😈 Distraire le Chef</span>
             <h2>Comment veux-tu le distraire ?</h2>
             <textarea value={distractionText} onChange={(event) => setDistractionText(event.target.value)} placeholder="Je viens t’embrasser pendant que tu dresses les assiettes." />
             <label className="private-photo-field">
@@ -2317,12 +2317,14 @@ export function LeGrimoireApp() {
                 type="button"
                 onClick={() => {
                   setDistractionOpen(false);
+                  setDistractionPlacement(null);
+                  setPreviewPoint(null);
                 }}
               >
                 Fermer
               </button>
               <button type="button" onClick={submitDistraction} disabled={distractionBusy || (!distractionText.trim() && !distractionFile)}>
-                {distractionBusy ? "..." : "Cacher pour le Chef"}
+                {distractionBusy ? "..." : "Poser ici"}
               </button>
             </div>
             {authError ? <p className="staff-error">{authError}</p> : null}

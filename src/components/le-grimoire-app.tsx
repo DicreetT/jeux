@@ -10,7 +10,7 @@ type Place = "cuisine" | "grimoire" | "caisse" | "pause";
 type SceneName = "cuisine" | "pause";
 type UserRole = "chef" | "serveuse";
 type ProfileRole = "chef" | "serveuse";
-type ChefStatus = "en_cuisine" | "en_pause" | "hors_service";
+type ChefStatus = "en_cuisine" | "en_pause" | "service_termine" | "hors_service";
 type ServeuseStatus = "absente" | "dans_les_parages" | "embeter_le_chef";
 type CaisseMode = "overview" | "tip" | "shop";
 type PlacedItemType =
@@ -26,6 +26,7 @@ type PlacedItemType =
   | "betise"
   | "surveillance"
   | "rappel"
+  | "tough_love"
   | "petit_mot"
   | "cigarette"
   | "paquet_cigarettes"
@@ -107,6 +108,8 @@ type GrimoireEntry = {
   techniques: string;
   notes: string;
   next?: string;
+  portions?: string;
+  dressage?: string;
   status?: PourToiStatus;
   envie?: string;
   flavors?: string;
@@ -130,6 +133,13 @@ type GrimoireDraft = Pick<
   | "ingredients"
   | "preparation"
   | "notes"
+  | "quantities"
+  | "time"
+  | "temperatures"
+  | "techniques"
+  | "next"
+  | "portions"
+  | "dressage"
   | "envie"
   | "flavors"
   | "avoid"
@@ -171,6 +181,7 @@ const roleLabels: Record<UserRole, string> = {
 const chefStatuses: Array<{ id: ChefStatus; label: string; line: string }> = [
   { id: "en_cuisine", label: "🔥 En cuisine", line: "🔥 En cuisine" },
   { id: "en_pause", label: "🚬 En pause", line: "🚬 En pause" },
+  { id: "service_termine", label: "🍷 Service terminé", line: "🍷 Service terminé" },
   { id: "hors_service", label: "🌙 Hors service", line: "🌙 Hors service" },
 ];
 
@@ -188,6 +199,7 @@ const chefResponses = [
 ];
 
 const cuisineItemTypes: Array<{ id: PlacedItemType; label: string; short: string }> = [
+  { id: "note", label: "💌 Note", short: "note" },
   { id: "bisou", label: "💋 Bisou", short: "bisou" },
   { id: "viande", label: "🥩 Viande", short: "viande" },
   { id: "beurre", label: "🧈 Beurre", short: "beurre" },
@@ -195,8 +207,9 @@ const cuisineItemTypes: Array<{ id: PlacedItemType; label: string; short: string
   { id: "the", label: "🍵 Thé", short: "thé" },
   { id: "patisserie", label: "🍰 Pâtisserie", short: "pâtisserie" },
   { id: "fleur", label: "🌹 Fleur", short: "fleur" },
+  { id: "chocolat", label: "🍫 Chocolat", short: "chocolat" },
   { id: "surveillance", label: "👀 Je te surveille", short: "surveillance" },
-  { id: "rappel", label: "📌 Rappel", short: "rappel" },
+  { id: "tough_love", label: "😼 Tough love", short: "tough love" },
 ];
 
 const pauseItemTypes: Array<{ id: PlacedItemType; label: string; short: string }> = [
@@ -207,6 +220,7 @@ const pauseItemTypes: Array<{ id: PlacedItemType; label: string; short: string }
   { id: "cafe", label: "☕ Café", short: "café" },
   { id: "the", label: "🍵 Thé", short: "thé" },
   { id: "viande", label: "🥩 Viande", short: "viande" },
+  { id: "beurre", label: "🧈 Beurre", short: "beurre" },
   { id: "chocolat", label: "🍫 Chocolat", short: "chocolat" },
   { id: "fleur", label: "🌹 Fleur", short: "fleur" },
   { id: "petit_mot", label: "📌 Petit mot", short: "mot" },
@@ -225,6 +239,7 @@ const itemMeta: Record<PlacedItemType, { label: string; mark: string }> = {
   betise: { label: "Bêtise", mark: "🔥" },
   surveillance: { label: "Je te surveille", mark: "👀" },
   rappel: { label: "Rappel", mark: "📌" },
+  tough_love: { label: "Tough love", mark: "😼" },
   petit_mot: { label: "Petit mot", mark: "📌" },
   cigarette: { label: "Cigarette", mark: "🚬" },
   paquet_cigarettes: { label: "Paquet de cigarettes", mark: "🚬" },
@@ -246,8 +261,8 @@ const boutiqueItems = [
 
 const grimoireSections: Array<{ id: GrimoireSection; label: string; description: string }> = [
   { id: "index", label: "Index", description: "La primera doble página del libro." },
-  { id: "chef", label: "Recettes du Chef", description: "Cuaderno profesional, temperaturas, tiempos y técnica." },
-  { id: "pour_toi", label: "Pour toi ❤️", description: "Lo que cocinaríamos el uno para el otro." },
+  { id: "chef", label: "Recettes du Chef", description: "Ce qu’il ne veut pas oublier." },
+  { id: "pour_toi", label: "Pour toi ❤️", description: "Ce qu’on cuisine l’un pour l’autre." },
 ];
 
 const initialGrimoireEntries: GrimoireEntry[] = [
@@ -266,6 +281,8 @@ const initialGrimoireEntries: GrimoireEntry[] = [
     techniques: "Asar\nLacar\nReposar",
     notes: "Debe quedar profundo, no pesado. La salsa manda, pero no grita.",
     next: "Probar con limón confitado picado muy fino.",
+    portions: "2 portions",
+    dressage: "Pulpe nacrée, grenade en pluie fine, herbes au dernier moment.",
   },
   {
     id: "recipe-grenade",
@@ -282,77 +299,14 @@ const initialGrimoireEntries: GrimoireEntry[] = [
     techniques: "Réduire\nLier\nRectifier",
     notes: "Va très bien avec cordero, pato o légumes rôtis.",
     next: "Tester une version plus sèche pour dressage fin.",
-  },
-  {
-    id: "pour-toi-pistache",
-    section: "pour_toi",
-    kind: "envie",
-    title: "Pistache & chocolat noir",
-    from: "serveuse",
-    to: "chef",
-    date: "2026-08-09T00:00:00.000Z",
-    ingredients: "Pistache\nChocolat noir\nQuelque chose d'acide",
-    quantities: "À décider par Monsieur le Chef",
-    time: "Quand tu veux",
-    temperatures: "Pas brûler le chocolat, merci",
-    preparation: "Je veux quelque chose avec pistache et chocolat. Le reste est ton problème, Monsieur le Chef.",
-    techniques: "",
-    notes: "Surprends-moi. Mais si c’est moche, je juge.",
-    next: "",
-    status: "envoyé",
-    envie: "Quelque chose de chaud.",
-    flavors: "Pistache + chocolat noir + quelque chose d’acide",
-    avoid: "Quelque chose de trop sucré",
-    mood: "Après service, fatiguée mais dangereuse",
-    liberty: "Totale",
-    petitMot: "Surprends-moi. Mais si c’est moche, je juge.",
-  },
-  {
-    id: "ferais-entrecote",
-    section: "pour_toi",
-    kind: "ferais",
-    title: "Entrecôte après service",
-    from: "chef",
-    to: "serveuse",
-    date: "2026-08-09T00:00:00.000Z",
-    ingredients: "Entrecôte\nPommes dauphines\nJus au poivre",
-    quantities: "Deux tasses",
-    time: "Après fermeture",
-    temperatures: "Chaud, mais pas pressé",
-    preparation: "Entrecôte, pommes dauphines, jus au poivre.",
-    techniques: "",
-    notes: "Parce que tu dis que tu n’as pas faim et ensuite tu manges la moitié de mon assiette.",
-    status: "envoyé",
-    dishIdea: "Entrecôte, pommes dauphines, jus au poivre.",
-    description: "Simple, chaud, précis. Un vrai plat de fin de journée.",
-    whyYou: "Parce que tu dis que tu n’as pas faim et ensuite tu manges la moitié de mon assiette.",
-    petitMot: "Je ferais semblant de ne pas voir.",
+    portions: "Base sauce",
+    dressage: "Utiliser en points brillants ou nappage très fin.",
   },
 ];
 
-const initialEvents: KitchenEvent[] = [
-  {
-    id: "event-welcome",
-    from: "serveuse",
-    title: "Rien à signaler.",
-    message: "La cuisine attend tranquillement son prochain désordre.",
-    date: "2026-08-09T00:00:00.000Z",
-  },
-];
+const initialEvents: KitchenEvent[] = [];
 
-const initialPlacedItems: ScenePlacedItem[] = [
-  {
-    id: "item-cup-bisou",
-    scene: "cuisine",
-    xPercent: 78,
-    yPercent: 70,
-    type: "bisou",
-    authorId: "serveuse",
-    recipientId: "chef",
-    message: "Sur ta tasse. À réclamer après le service.",
-    createdAt: "2026-08-09T00:00:00.000Z",
-  },
-];
+const initialPlacedItems: ScenePlacedItem[] = [];
 
 const initialWallets: Wallets = { chef: 120, serveuse: 120 };
 const initialEntries: CaisseEntry[] = [];
@@ -365,8 +319,15 @@ function createEmptyGrimoireDraft(section: Exclude<GrimoireSection, "index"> = "
     kind: section === "pour_toi" ? "envie" : "recipe",
     title: "",
     ingredients: "",
+    quantities: "",
+    time: "",
+    temperatures: "",
     preparation: "",
+    techniques: "",
     notes: "",
+    next: "",
+    portions: "",
+    dressage: "",
     envie: "",
     flavors: "",
     avoid: "",
@@ -749,6 +710,10 @@ function lines(value: string) {
     .filter(Boolean);
 }
 
+function isSeededPourToiEntry(entry: GrimoireEntry) {
+  return entry.id === "pour-toi-pistache" || entry.id === "ferais-entrecote";
+}
+
 export function LeGrimoireApp() {
   const sceneRef = useRef<HTMLElement | null>(null);
   const captureInputRef = useRef<HTMLInputElement | null>(null);
@@ -777,6 +742,7 @@ export function LeGrimoireApp() {
   const [caisseEntries, setCaisseEntries] = useSharedState<CaisseEntry[]>("le-grimoire:caisse-entries", initialEntries);
   const [sharedItems, setSharedItems] = useSharedState<SharedKitchenItem[]>("le-grimoire:shared-items", initialSharedItems);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [objectTrayOpen, setObjectTrayOpen] = useState(false);
   const [placingType, setPlacingType] = useState<PlacedItemType | null>(null);
   const [previewPoint, setPreviewPoint] = useState<ImagePoint | null>(null);
   const [draftPlacement, setDraftPlacement] = useState<(ImagePoint & { scene: SceneName; type: PlacedItemType }) | null>(null);
@@ -798,7 +764,6 @@ export function LeGrimoireApp() {
   const [grimoireDraftOpen, setGrimoireDraftOpen] = useState(false);
   const [grimoireDraft, setGrimoireDraft] = useState<GrimoireDraft>(createEmptyGrimoireDraft());
   const [pourToiReply, setPourToiReply] = useState("");
-  const [touchedHotspotId, setTouchedHotspotId] = useState<string | null>(null);
 
   const isChef = role === "chef";
   const passageEvents = events.filter(
@@ -883,6 +848,20 @@ export function LeGrimoireApp() {
       subscription.subscription.unsubscribe();
     };
   }, [setRole]);
+
+  useEffect(() => {
+    setGrimoireEntries((current) => {
+      const filtered = current.filter((entry) => !isSeededPourToiEntry(entry));
+      return filtered.length === current.length ? current : filtered;
+    });
+  }, [setGrimoireEntries]);
+
+  useEffect(() => {
+    setEvents((current) => {
+      const filtered = current.filter((event) => event.id !== "event-welcome");
+      return filtered.length === current.length ? current : filtered;
+    });
+  }, [setEvents]);
 
   async function reloadProfile() {
     if (!supabase || !session) return;
@@ -978,6 +957,7 @@ export function LeGrimoireApp() {
     setDraftPlacement(null);
     setDraftMessage("");
     setDrawerOpen(false);
+    setObjectTrayOpen(false);
   }
 
   function handleScenePointerMove(event: PointerEvent<HTMLElement>) {
@@ -1217,6 +1197,8 @@ export function LeGrimoireApp() {
       techniques: "À préciser",
       notes: `Né dans Pour toi. ${entry.petitMot || entry.notes || ""}`.trim(),
       next: "Compléter les détails techniques après service.",
+      portions: "À préciser",
+      dressage: "",
     };
 
     setGrimoireEntries((current) => [recipe, ...current]);
@@ -1248,13 +1230,15 @@ export function LeGrimoireApp() {
       to: grimoireDraft.section === "pour_toi" ? otherRole(role) : undefined,
       date: nowIso(),
       ingredients: grimoireDraft.ingredients.trim() || grimoireDraft.flavors?.trim() || "À préciser",
-      quantities: "À préciser",
-      time: "À préciser",
-      temperatures: "À préciser",
+      quantities: grimoireDraft.quantities.trim() || "À préciser",
+      time: grimoireDraft.time.trim() || "À préciser",
+      temperatures: grimoireDraft.temperatures.trim() || "À préciser",
       preparation,
-      techniques: "À préciser",
+      techniques: grimoireDraft.techniques.trim() || "À préciser",
       notes: grimoireDraft.notes.trim(),
-      next: "",
+      next: grimoireDraft.next?.trim() ?? "",
+      portions: grimoireDraft.portions?.trim(),
+      dressage: grimoireDraft.dressage?.trim(),
       status: grimoireDraft.section === "pour_toi" ? "envoyé" : undefined,
       envie: grimoireDraft.envie?.trim(),
       flavors: grimoireDraft.flavors?.trim(),
@@ -1412,8 +1396,10 @@ export function LeGrimoireApp() {
   const visibleItems = placedItems.filter((item) => item.scene === activeScene && !item.collectedAt);
   const previewCss = previewPoint ? imagePointToCssPoint(previewPoint, sceneSize) : null;
   const draftCss = draftPlacement ? contextPaperStyle(draftPlacement, sceneSize) : null;
-  const draftItemTypes = draftPlacement?.scene === "pause" ? pauseItemTypes : cuisineItemTypes;
-  const currentGrimoireEntries = grimoireSection === "index" ? [] : grimoireEntries.filter((entry) => entry.section === grimoireSection);
+  const currentGrimoireEntries =
+    grimoireSection === "index"
+      ? []
+      : grimoireEntries.filter((entry) => entry.section === grimoireSection && !isSeededPourToiEntry(entry));
   const activeGrimoireEntry =
     currentGrimoireEntries.find((entry) => entry.id === activeGrimoireId) ?? currentGrimoireEntries[0];
   const canRespondToActiveGrimoireEntry =
@@ -1437,9 +1423,8 @@ export function LeGrimoireApp() {
 
         {isSupabaseConfigured ? (
           <div className="role-pin locked" aria-label="Rôle connecté">
-            <strong>{roleLabels[role]}</strong>
-            <button type="button" onClick={signOut}>
-              Sortir
+            <button type="button" className="signout-key" onClick={signOut} aria-label="Sortir">
+              Clef
             </button>
           </div>
         ) : (
@@ -1454,8 +1439,8 @@ export function LeGrimoireApp() {
         )}
 
         {place !== "cuisine" ? (
-          <button className="return-cuisine" type="button" onClick={() => setPlace("cuisine")}>
-            Cuisine
+          <button className="return-cuisine" type="button" onClick={() => setPlace("cuisine")} aria-label="Retour à la cuisine">
+            ↩
           </button>
         ) : null}
 
@@ -1463,24 +1448,13 @@ export function LeGrimoireApp() {
           <button
             key={hotspot.id}
             type="button"
-            className={`scene-hotspot hotspot-${hotspot.id} ${hotspot.state ?? "quiet"} ${touchedHotspotId === hotspot.id ? "touched" : ""}`}
+            className={`scene-hotspot hotspot-${hotspot.id} ${hotspot.state ?? "quiet"}`}
             style={{
               ...imagePointToCssPoint(hotspot, sceneSize),
               width: `${hotspot.widthPercent}%`,
               height: `${hotspot.heightPercent}%`,
             }}
-            onClick={(event) => {
-              if (window.matchMedia("(hover: none)").matches && touchedHotspotId !== hotspot.id) {
-                event.preventDefault();
-                setTouchedHotspotId(hotspot.id);
-                window.setTimeout(() => {
-                  setTouchedHotspotId((current) => (current === hotspot.id ? null : current));
-                }, 1800);
-                return;
-              }
-              setTouchedHotspotId(null);
-              hotspot.action();
-            }}
+            onClick={hotspot.action}
             aria-label={hotspot.label}
           >
             <span>{hotspot.label}</span>
@@ -1516,8 +1490,10 @@ export function LeGrimoireApp() {
         {place === "cuisine" ? (
           <>
             <aside className="service-board">
-              <span>Le Chef</span>
-              <strong>{statusLine(chefStatuses, chefStatus)}</strong>
+              <div className="status-line chef-line">
+                <span>Le Chef</span>
+                <strong>{statusLine(chefStatuses, chefStatus)}</strong>
+              </div>
               {isChef ? (
                 <div>
                   {chefStatuses.map((status) => (
@@ -1527,11 +1503,10 @@ export function LeGrimoireApp() {
                   ))}
                 </div>
               ) : null}
-            </aside>
-
-            <aside className="serveuse-tag">
-              <span>Serveuse</span>
-              <strong>{statusLine(serveuseStatuses, serveuseStatus)}</strong>
+              <div className="status-line serveuse-line">
+                <span>Serveuse</span>
+                <strong>{statusLine(serveuseStatuses, serveuseStatus)}</strong>
+              </div>
               {isChef ? null : (
                 <div>
                   {serveuseStatuses.map((status) => (
@@ -1580,17 +1555,52 @@ export function LeGrimoireApp() {
             </aside>
 
             <aside className={drawerOpen ? "action-drawer open" : "action-drawer"} aria-label="Actions">
-              <button className="drawer-pull" type="button" onClick={() => setDrawerOpen((current) => !current)} aria-label="Actions">
+              <button
+                className="drawer-pull"
+                type="button"
+                onClick={() => {
+                  if (drawerOpen) setObjectTrayOpen(false);
+                  setDrawerOpen((current) => !current);
+                }}
+                aria-label="Actions"
+              >
                 ✦
               </button>
               {drawerOpen ? (
                 <div>
                   <span>Actions</span>
-                  <button type="button" onClick={() => beginPlacement(activeScene === "pause" ? "lettre" : "bisou")}>
+                  <button type="button" onClick={() => setObjectTrayOpen((current) => !current)}>
                     💌 Laisser quelque chose
                   </button>
+                  {objectTrayOpen ? (
+                    <div className="object-choice-grid" aria-label="Objets à cacher">
+                      {(activeScene === "pause" ? pauseItemTypes : cuisineItemTypes).map((item) => (
+                        <button key={item.id} type="button" onClick={() => beginPlacement(item.id)}>
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                   {!isChef && activeScene === "cuisine" ? (
-                    <button type="button" onClick={() => setDistractionOpen(true)}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        addEvent("serveuse", "🔥 La Serveuse est passée.", "Quelque chose dans la cuisine paraît légèrement suspect.", "chef");
+                        setDrawerOpen(false);
+                      }}
+                    >
+                      🔥 Petite bêtise
+                    </button>
+                  ) : null}
+                  {!isChef && activeScene === "cuisine" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDistractionOpen(true);
+                        setDrawerOpen(false);
+                        setObjectTrayOpen(false);
+                      }}
+                    >
                       💋 Distraire
                     </button>
                   ) : null}
@@ -1741,11 +1751,27 @@ export function LeGrimoireApp() {
                           />
                         </label>
                         <label>
+                          Portions / rendement
+                          <input
+                            value={grimoireDraft.portions}
+                            onChange={(event) => setGrimoireDraft((current) => ({ ...current, portions: event.target.value }))}
+                            placeholder="4 portions"
+                          />
+                        </label>
+                        <label>
                           Ingrédients
                           <textarea
                             value={grimoireDraft.ingredients}
                             onChange={(event) => setGrimoireDraft((current) => ({ ...current, ingredients: event.target.value }))}
                             placeholder="Un ingrédient par ligne"
+                          />
+                        </label>
+                        <label>
+                          Quantités
+                          <textarea
+                            value={grimoireDraft.quantities}
+                            onChange={(event) => setGrimoireDraft((current) => ({ ...current, quantities: event.target.value }))}
+                            placeholder="2 aubergines, 80 g beurre..."
                           />
                         </label>
                       </div>
@@ -1768,7 +1794,11 @@ export function LeGrimoireApp() {
                             </button>
                           ))
                         ) : (
-                          <p>Cette section attend sa première page.</p>
+                          <p>
+                            {grimoireSection === "pour_toi"
+                              ? "Ce qu’on cuisine l’un pour l’autre. La première vraie page attend encore."
+                              : "Cette section attend sa première page."}
+                          </p>
                         )}
                       </div>
                       {activeGrimoireEntry ? (
@@ -1818,6 +1848,12 @@ export function LeGrimoireApp() {
                           <div className="ingredient-ink">
                             <h2>{activeGrimoireEntry.title}</h2>
                             <dl>
+                              {activeGrimoireEntry.portions ? (
+                                <div>
+                                  <dt>Portions</dt>
+                                  <dd>{activeGrimoireEntry.portions}</dd>
+                                </div>
+                              ) : null}
                               <div>
                                 <dt>Temps</dt>
                                 <dd>{activeGrimoireEntry.time}</dd>
@@ -1833,6 +1869,16 @@ export function LeGrimoireApp() {
                                 <li key={ingredient}>{ingredient}</li>
                               ))}
                             </ul>
+                            {activeGrimoireEntry.quantities ? (
+                              <>
+                                <h3>Quantités</h3>
+                                <ul>
+                                  {lines(activeGrimoireEntry.quantities).map((quantity) => (
+                                    <li key={quantity}>{quantity}</li>
+                                  ))}
+                                </ul>
+                              </>
+                            ) : null}
                           </div>
                         )
                       ) : null}
@@ -1897,6 +1943,22 @@ export function LeGrimoireApp() {
                       ) : (
                         <>
                           <label>
+                            Temps
+                            <input
+                              value={grimoireDraft.time}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, time: event.target.value }))}
+                              placeholder="45 min"
+                            />
+                          </label>
+                          <label>
+                            Températures
+                            <input
+                              value={grimoireDraft.temperatures}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, temperatures: event.target.value }))}
+                              placeholder="Four 210 °C"
+                            />
+                          </label>
+                          <label>
                             Préparation
                             <textarea
                               value={grimoireDraft.preparation}
@@ -1905,11 +1967,35 @@ export function LeGrimoireApp() {
                             />
                           </label>
                           <label>
+                            Techniques
+                            <textarea
+                              value={grimoireDraft.techniques}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, techniques: event.target.value }))}
+                              placeholder="Rôtir, réduire, monter..."
+                            />
+                          </label>
+                          <label>
+                            Dressage
+                            <textarea
+                              value={grimoireDraft.dressage}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, dressage: event.target.value }))}
+                              placeholder="Notes d’emplatage..."
+                            />
+                          </label>
+                          <label>
                             Notes
                             <textarea
                               value={grimoireDraft.notes}
                               onChange={(event) => setGrimoireDraft((current) => ({ ...current, notes: event.target.value }))}
                               placeholder="Pour la prochaine fois..."
+                            />
+                          </label>
+                          <label>
+                            À modifier la prochaine fois
+                            <textarea
+                              value={grimoireDraft.next}
+                              onChange={(event) => setGrimoireDraft((current) => ({ ...current, next: event.target.value }))}
+                              placeholder="Ce que tu changerais..."
                             />
                           </label>
                         </>
@@ -2024,6 +2110,12 @@ export function LeGrimoireApp() {
                           <>
                             <h3>Notes</h3>
                             <p>{activeGrimoireEntry.notes}</p>
+                          </>
+                        ) : null}
+                        {activeGrimoireEntry.dressage ? (
+                          <>
+                            <h3>Dressage</h3>
+                            <p>{activeGrimoireEntry.dressage}</p>
                           </>
                         ) : null}
                         {activeGrimoireEntry.next ? (
@@ -2143,23 +2235,6 @@ export function LeGrimoireApp() {
           <section className={draftPlacement.type === "lettre" ? "paper-modal letter-paper writing-paper context-paper" : "paper-modal small-paper context-paper"} style={draftCss ?? undefined} aria-label="Poser un objet">
             <span>{itemMeta[draftPlacement.type].label}</span>
             <h2>{draftPlacement.type === "lettre" ? "Écrire une lettre" : "Laisser quelque chose ici"}</h2>
-            <label className="paper-object-select">
-              Qu’est-ce que tu caches ?
-              <select
-                value={draftPlacement.type}
-                onChange={(event) =>
-                  setDraftPlacement((current) =>
-                    current ? { ...current, type: event.target.value as PlacedItemType } : current,
-                  )
-                }
-              >
-                {draftItemTypes.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </label>
             <textarea
               value={draftMessage}
               onChange={(event) => setDraftMessage(event.target.value)}
